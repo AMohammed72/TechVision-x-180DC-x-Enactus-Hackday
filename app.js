@@ -1905,20 +1905,151 @@
         }
       };
 
-      $$('.nav-tab').forEach(tab => {
-        tab.addEventListener('click', () => {
-          MicroChart.hideTooltip();
-          $$('.nav-tab').forEach(t => t.classList.remove('active'));
-          $$('.tab-panel').forEach(p => p.classList.remove('active'));
-          tab.classList.add('active');
-          const tabId = tab.dataset.tab;
-          const panel = $(tabId);
-          if (panel) panel.classList.add('active');
-          state.currentTab = tabId;
-
-          renderActiveTab(tabId);
-          requestAnimationFrame(() => renderActiveTab(tabId));
+      const closeAllNavDropdowns = () => {
+        $$('.nav-group.has-dropdown').forEach(grp => {
+          grp.classList.remove('open');
+          const trig = grp.querySelector('.nav-group-trigger');
+          if (trig) trig.setAttribute('aria-expanded', 'false');
         });
+      };
+
+      const closeMobileNavDrawer = () => {
+        const nav = $('navTabs');
+        const toggle = $('mobileNavToggle');
+        if (nav) nav.classList.remove('mobile-open');
+        if (toggle) toggle.setAttribute('aria-expanded', 'false');
+      };
+
+      const activateTab = (tabId) => {
+        if (!tabId) return;
+        MicroChart.hideTooltip();
+
+        // Update tab panels
+        $$('.tab-panel').forEach(p => {
+          const isMatch = p.id === tabId;
+          p.classList.toggle('active', isMatch);
+        });
+
+        // Update primary nav items (.nav-tab) & their parent category group triggers
+        $$('.nav-tab').forEach(t => {
+          const isMatch = t.dataset.tab === tabId;
+          t.classList.toggle('active', isMatch);
+          t.setAttribute('aria-selected', isMatch ? 'true' : 'false');
+        });
+
+        // Update quick-switch pills (.nav-pill)
+        $$('.nav-pill').forEach(pill => {
+          const isMatch = pill.dataset.tab === tabId;
+          pill.classList.toggle('active', isMatch);
+          pill.setAttribute('aria-selected', isMatch ? 'true' : 'false');
+        });
+
+        // Update parent category triggers (.nav-group-trigger)
+        $$('.nav-group.has-dropdown').forEach(grp => {
+          const hasActiveChild = !!grp.querySelector(`.nav-tab[data-tab="${tabId}"]`);
+          const trig = grp.querySelector('.nav-group-trigger');
+          if (trig) trig.classList.toggle('active', hasActiveChild);
+        });
+
+        // Update active view breadcrumb indicator in header
+        const activeNavEl = document.querySelector(`.nav-tab[data-tab="${tabId}"]`);
+        if (activeNavEl) {
+          if ($('breadcrumbCategory')) {
+            $('breadcrumbCategory').textContent = activeNavEl.dataset.category || 'Dashboard';
+          }
+          if ($('breadcrumbPage')) {
+            $('breadcrumbPage').textContent = activeNavEl.dataset.title || activeNavEl.textContent.trim();
+          }
+        }
+
+        state.currentTab = tabId;
+        closeAllNavDropdowns();
+        closeMobileNavDrawer();
+
+        renderActiveTab(tabId);
+        requestAnimationFrame(() => renderActiveTab(tabId));
+      };
+
+      // Bind clicks on all .nav-tab items (dropdown items + direct links) and .nav-pill items
+      $$('.nav-tab, .nav-pill').forEach(item => {
+        item.addEventListener('click', (e) => {
+          e.stopPropagation();
+          activateTab(item.dataset.tab);
+        });
+      });
+
+      // Bind clicks and keyboard navigation on categorized dropdown triggers (.nav-group-trigger)
+      $$('.nav-group.has-dropdown').forEach(grp => {
+        const trigger = grp.querySelector('.nav-group-trigger');
+        const menuItems = Array.from(grp.querySelectorAll('.nav-dropdown-item'));
+        if (!trigger) return;
+
+        trigger.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const wasOpen = grp.classList.contains('open');
+          closeAllNavDropdowns();
+          if (!wasOpen) {
+            grp.classList.add('open');
+            trigger.setAttribute('aria-expanded', 'true');
+          }
+        });
+
+        trigger.addEventListener('keydown', (e) => {
+          if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            closeAllNavDropdowns();
+            grp.classList.add('open');
+            trigger.setAttribute('aria-expanded', 'true');
+            if (menuItems[0]) menuItems[0].focus();
+          } else if (e.key === 'Escape') {
+            closeAllNavDropdowns();
+            trigger.focus();
+          }
+        });
+
+        menuItems.forEach((item, idx) => {
+          item.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowDown') {
+              e.preventDefault();
+              const next = menuItems[(idx + 1) % menuItems.length];
+              if (next) next.focus();
+            } else if (e.key === 'ArrowUp') {
+              e.preventDefault();
+              const prev = menuItems[(idx - 1 + menuItems.length) % menuItems.length];
+              if (prev) prev.focus();
+            } else if (e.key === 'Escape') {
+              e.preventDefault();
+              closeAllNavDropdowns();
+              trigger.focus();
+            }
+          });
+        });
+      });
+
+      // Mobile Hamburger Toggle
+      const mobileToggle = $('mobileNavToggle');
+      if (mobileToggle) {
+        mobileToggle.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const nav = $('navTabs');
+          if (!nav) return;
+          const isOpen = nav.classList.toggle('mobile-open');
+          mobileToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+        });
+      }
+
+      // Close dropdowns / mobile menu on outside click or Escape key
+      document.addEventListener('click', (e) => {
+        if (!e.target.closest('.nav-group.has-dropdown')) {
+          closeAllNavDropdowns();
+        }
+      });
+
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          closeAllNavDropdowns();
+          closeMobileNavDrawer();
+        }
       });
 
       if ($('btnThemeToggle')) {
@@ -2230,7 +2361,8 @@
     renderVerificationTab() {
       const discs = state.data.discrepancies || [];
       const pnlRows = state.data.pnl_fixed || [];
-      $('badgeDiscrepanciesCount').textContent = discs.length;
+      if ($('badgeDiscrepanciesCount')) $('badgeDiscrepanciesCount').textContent = discs.length;
+      if ($('badgeDiscrepanciesCountMenu')) $('badgeDiscrepanciesCountMenu').textContent = discs.length;
       $('kpiFixed').textContent = discs.length;
 
       if ($('kpiIntegritySub')) {

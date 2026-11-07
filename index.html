@@ -20,30 +20,213 @@
         <div class="brand-subtitle">Data Verifier, Multi-Store Comparison, Channel Economics & Huff Gravity Expansion</div>
       </div>
     </div>
+
+    <div class="header-controls">
+      <div class="active-view-indicator" id="activeViewBreadcrumb" aria-live="polite">
+        <span class="breadcrumb-cat" id="breadcrumbCategory">Data & Integrity</span>
+        <span class="breadcrumb-sep">/</span>
+        <span class="breadcrumb-page" id="breadcrumbPage">Reconciliation & Errors</span>
+      </div>
+      <button
+        type="button"
+        class="mobile-nav-toggle"
+        id="mobileNavToggle"
+        aria-label="Toggle navigation menu"
+        aria-expanded="false"
+        aria-controls="navTabs"
+      >
+        <span class="hamburger-bars" aria-hidden="true">
+          <span></span>
+          <span></span>
+          <span></span>
+        </span>
+        <span class="mobile-nav-toggle-label">Menu</span>
+      </button>
+    </div>
   </header>
 
-  <!-- Navigation Tabs -->
-  <nav class="nav-tabs" id="navTabs">
-    <div class="nav-tab active" data-tab="tab-verifier">
-      Reconciliation & Errors <span class="tab-badge" id="badgeDiscrepanciesCount">0</span>
-    </div>
-    <div class="nav-tab" data-tab="tab-dashboard">
-      Executive P&L Dashboard
-    </div>
-    <div class="nav-tab" data-tab="tab-compare">
-      Multi-Store Comparison
-    </div>
-    <div class="nav-tab" data-tab="tab-channels">
-      Channel Economics & Profit Drains
-    </div>
-    <div class="nav-tab" data-tab="tab-sentiment">
-      Sentiment Pipeline & Store Insights
-    </div>
-    <div class="nav-tab" data-tab="tab-catchment">
-      Catchment & Expansion Sites
-    </div>
-    <div class="nav-tab" data-tab="tab-explorer">
-      Data Explorer & Upload
+  <!-- Primary Navigation Bar (Categorized Dropdowns + Direct Items, Zero Horizontal Scroll) -->
+  <nav class="primary-nav" id="navTabs" aria-label="Main Dashboard Navigation">
+    <div class="nav-container">
+      <ul class="nav-list" role="menubar" aria-label="Dashboard Sections">
+        <!-- 1. Data & Integrity (Categorized Dropdown) -->
+        <li class="nav-group has-dropdown" data-group="data-integrity" role="none">
+          <button
+            type="button"
+            class="nav-group-trigger active"
+            id="navTriggerData"
+            aria-haspopup="true"
+            aria-expanded="false"
+            aria-controls="navMenuData"
+            role="menuitem"
+          >
+            <span class="nav-group-label">Data &amp; Integrity</span>
+            <span class="tab-badge" id="badgeDiscrepanciesCount" title="Reconciled Discrepancies">0</span>
+            <span class="nav-caret" aria-hidden="true">▾</span>
+          </button>
+          <div class="nav-dropdown-menu" id="navMenuData" role="menu" aria-labelledby="navTriggerData">
+            <button
+              type="button"
+              class="nav-tab nav-dropdown-item active"
+              id="navTab-verifier"
+              data-tab="tab-verifier"
+              data-category="Data & Integrity"
+              data-title="Reconciliation & Errors"
+              role="menuitem"
+              aria-selected="true"
+              aria-controls="tab-verifier"
+            >
+              <span class="nav-item-head">
+                <span class="nav-item-title">Reconciliation &amp; Errors</span>
+                <span class="tab-badge" id="badgeDiscrepanciesCountMenu">0</span>
+              </span>
+              <span class="nav-item-desc">Cross-dataset discrepancy log, auto-fix engine &amp; deep-dive diff inspector</span>
+            </button>
+            <button
+              type="button"
+              class="nav-tab nav-dropdown-item"
+              id="navTab-explorer"
+              data-tab="tab-explorer"
+              data-category="Data & Integrity"
+              data-title="Data Explorer & Upload"
+              role="menuitem"
+              aria-selected="false"
+              aria-controls="tab-explorer"
+            >
+              <span class="nav-item-head">
+                <span class="nav-item-title">Data Explorer &amp; Upload</span>
+              </span>
+              <span class="nav-item-desc">Live CSV upload, 50-check schema validator &amp; master table browser</span>
+            </button>
+          </div>
+        </li>
+
+        <!-- 2. Financial Performance (Categorized Dropdown) -->
+        <li class="nav-group has-dropdown" data-group="financial-performance" role="none">
+          <button
+            type="button"
+            class="nav-group-trigger"
+            id="navTriggerFinance"
+            aria-haspopup="true"
+            aria-expanded="false"
+            aria-controls="navMenuFinance"
+            role="menuitem"
+          >
+            <span class="nav-group-label">Financial Performance</span>
+            <span class="nav-caret" aria-hidden="true">▾</span>
+          </button>
+          <div class="nav-dropdown-menu" id="navMenuFinance" role="menu" aria-labelledby="navTriggerFinance">
+            <button
+              type="button"
+              class="nav-tab nav-dropdown-item"
+              id="navTab-dashboard"
+              data-tab="tab-dashboard"
+              data-category="Financial Performance"
+              data-title="Executive P&L Dashboard"
+              role="menuitem"
+              aria-selected="false"
+              aria-controls="tab-dashboard"
+            >
+              <span class="nav-item-head">
+                <span class="nav-item-title">Executive P&amp;L Dashboard</span>
+              </span>
+              <span class="nav-item-desc">Chain &amp; store revenue, profit trajectory, event impact &amp; league table</span>
+            </button>
+            <button
+              type="button"
+              class="nav-tab nav-dropdown-item"
+              id="navTab-compare"
+              data-tab="tab-compare"
+              data-category="Financial Performance"
+              data-title="Multi-Store Comparison"
+              role="menuitem"
+              aria-selected="false"
+              aria-controls="tab-compare"
+            >
+              <span class="nav-item-head">
+                <span class="nav-item-title">Multi-Store Comparison</span>
+              </span>
+              <span class="nav-item-desc">Side-by-side store P&amp;L timelines, head-to-head cards &amp; variance matrix</span>
+            </button>
+            <button
+              type="button"
+              class="nav-tab nav-dropdown-item"
+              id="navTab-channels"
+              data-tab="tab-channels"
+              data-category="Financial Performance"
+              data-title="Channel Economics & Profit Drains"
+              role="menuitem"
+              aria-selected="false"
+              aria-controls="tab-channels"
+            >
+              <span class="nav-item-head">
+                <span class="nav-item-title">Channel Economics &amp; Profit Drains</span>
+              </span>
+              <span class="nav-item-desc">In-Store vs. App vs. Third-Party Delivery margins, commissions &amp; packing costs</span>
+            </button>
+          </div>
+        </li>
+
+        <!-- 3. Customer & Sentiment (Direct Primary Item) -->
+        <li class="nav-group" role="none">
+          <button
+            type="button"
+            class="nav-tab nav-direct-link"
+            id="navTab-sentiment"
+            data-tab="tab-sentiment"
+            data-category="Customer & Sentiment"
+            data-title="Sentiment Pipeline & Store Insights"
+            role="menuitem"
+            aria-selected="false"
+            aria-controls="tab-sentiment"
+          >
+            <span class="nav-group-label">Customer &amp; Sentiment</span>
+          </button>
+        </li>
+
+        <!-- 4. Catchment & Expansion (Direct Primary Item) -->
+        <li class="nav-group" role="none">
+          <button
+            type="button"
+            class="nav-tab nav-direct-link"
+            id="navTab-catchment"
+            data-tab="tab-catchment"
+            data-category="Catchment & Expansion"
+            data-title="Catchment & Expansion Sites"
+            role="menuitem"
+            aria-selected="false"
+            aria-controls="tab-catchment"
+          >
+            <span class="nav-group-label">Catchment &amp; Expansion</span>
+          </button>
+        </li>
+      </ul>
+
+      <!-- Quick Direct-Switch Sub-Bar for Active Category Context (Desktop convenience) -->
+      <div class="nav-subbar" id="navContextPills" role="tablist" aria-label="Quick View Switcher">
+        <span class="nav-subbar-label">Quick Switch:</span>
+        <button type="button" class="nav-pill active" data-tab="tab-verifier" role="tab" aria-selected="true" aria-controls="tab-verifier">
+          Reconciliation &amp; Errors
+        </button>
+        <button type="button" class="nav-pill" data-tab="tab-dashboard" role="tab" aria-selected="false" aria-controls="tab-dashboard">
+          Executive P&amp;L
+        </button>
+        <button type="button" class="nav-pill" data-tab="tab-compare" role="tab" aria-selected="false" aria-controls="tab-compare">
+          Store Comparison
+        </button>
+        <button type="button" class="nav-pill" data-tab="tab-channels" role="tab" aria-selected="false" aria-controls="tab-channels">
+          Channel Economics
+        </button>
+        <button type="button" class="nav-pill" data-tab="tab-sentiment" role="tab" aria-selected="false" aria-controls="tab-sentiment">
+          Reviews &amp; Survey Sentiment
+        </button>
+        <button type="button" class="nav-pill" data-tab="tab-catchment" role="tab" aria-selected="false" aria-controls="tab-catchment">
+          Huff Gravity Expansion
+        </button>
+        <button type="button" class="nav-pill" data-tab="tab-explorer" role="tab" aria-selected="false" aria-controls="tab-explorer">
+          Data Explorer &amp; Upload
+        </button>
+      </div>
     </div>
   </nav>
 
