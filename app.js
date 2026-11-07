@@ -31,6 +31,21 @@
     '2026-01', '2026-02', '2026-03', '2026-04', '2026-05', '2026-06'
   ];
 
+  const STORE_COLORS = {
+    'S01': '#38bdf8', // sky blue
+    'S02': '#10b981', // emerald green
+    'S03': '#f59e0b', // amber
+    'S04': '#ec4899', // pink
+    'S05': '#8b5cf6', // purple
+    'S06': '#06b6d4', // cyan
+    'S07': '#ef4444', // red
+    'S08': '#84cc16', // lime
+    'S09': '#f97316', // orange
+    'S10': '#a855f7', // violet
+    'S11': '#14b8a6', // teal
+    'S12': '#eab308'  // yellow
+  };
+
   // --- Application State ---
   const state = {
     data: window.DASHBOARD_DATA || null,
@@ -49,7 +64,10 @@
     sentimentStoreFilter: 'ALL',
     sentimentSortOrder: 'sentiment_desc',
     sentimentSearch: '',
-    activeDataset: 'fixed_pnl'
+    activeDataset: 'fixed_pnl',
+    compareSelectedStores: ['S03', 'S12'],
+    compareTimeWindow: 'ALL',
+    compareMetricType: 'profit'
   };
 
   // --- High-Performance Micro-Canvas Charts with Event Annotation ---
@@ -221,6 +239,125 @@
         ctx.fillText(`${it.label} (${pct})`, legX + 16, legY + 9);
         legY += 20;
       });
+    },
+
+    drawMultiStoreCompareChart(canvasId, labels, datasets, metricType) {
+      const canvas = $(canvasId);
+      const setup = this.setupCanvas(canvas);
+      if (!setup) return;
+      const { ctx, width, height } = setup;
+
+      ctx.clearRect(0, 0, width, height);
+
+      if (!datasets || !datasets.length) {
+        ctx.fillStyle = state.theme === 'dark' ? '#94a3b8' : '#64748b';
+        ctx.font = '13px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('No stores selected for comparison. Please choose stores above.', width / 2, height / 2);
+        return;
+      }
+
+      const padding = { top: 25, right: 30, bottom: 35, left: 75 };
+      const chartWidth = width - padding.left - padding.right;
+      const chartHeight = height - padding.top - padding.bottom;
+
+      let minVal = Infinity;
+      let maxVal = -Infinity;
+
+      datasets.forEach(ds => {
+        ds.data.forEach(v => {
+          if (v < minVal) minVal = v;
+          if (v > maxVal) maxVal = v;
+        });
+      });
+
+      if (minVal === Infinity || maxVal === -Infinity) {
+        minVal = 0;
+        maxVal = 100;
+      }
+
+      if (minVal >= 0) {
+        minVal = 0;
+        maxVal = maxVal * 1.15 || 100;
+      } else {
+        const spread = maxVal - minVal;
+        minVal = minVal - spread * 0.12;
+        maxVal = maxVal + spread * 0.12;
+      }
+
+      const range = (maxVal - minVal) || 1;
+
+      const formatY = (val) => {
+        if (metricType === 'profit' || metricType === 'sales') {
+          return formatGBP(val);
+        } else if (metricType === 'margin') {
+          return val.toFixed(1) + '%';
+        } else {
+          return formatInt(val);
+        }
+      };
+
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = state.theme === 'dark' ? '#334155' : '#e2e8f0';
+      ctx.fillStyle = state.theme === 'dark' ? '#94a3b8' : '#64748b';
+      ctx.font = '10px sans-serif';
+      ctx.textAlign = 'right';
+
+      const gridSteps = 5;
+      for (let i = 0; i <= gridSteps; i++) {
+        const val = minVal + (i / gridSteps) * range;
+        const y = padding.top + chartHeight - (i / gridSteps) * chartHeight;
+        ctx.beginPath();
+        ctx.moveTo(padding.left, y);
+        ctx.lineTo(width - padding.right, y);
+        ctx.stroke();
+        ctx.fillText(formatY(val), padding.left - 8, y + 3);
+      }
+
+      if (minVal < 0 && maxVal > 0) {
+        const yZero = padding.top + chartHeight - ((0 - minVal) / range) * chartHeight;
+        ctx.save();
+        ctx.beginPath();
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = state.theme === 'dark' ? '#ef4444' : '#dc2626';
+        ctx.setLineDash([4, 4]);
+        ctx.moveTo(padding.left, yZero);
+        ctx.lineTo(width - padding.right, yZero);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      ctx.textAlign = 'center';
+      const stepX = chartWidth / (labels.length - 1 || 1);
+      labels.forEach((lbl, idx) => {
+        const x = padding.left + idx * stepX;
+        ctx.fillText(lbl, x, height - padding.bottom + 18);
+      });
+
+      datasets.forEach(ds => {
+        ctx.beginPath();
+        ctx.strokeStyle = ds.color || '#38bdf8';
+        ctx.lineWidth = 2.5;
+
+        labels.forEach((lbl, idx) => {
+          const val = ds.data[idx];
+          const x = padding.left + idx * stepX;
+          const y = padding.top + chartHeight - ((val - minVal) / range) * chartHeight;
+          if (idx === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+
+        ctx.fillStyle = ds.color || '#38bdf8';
+        labels.forEach((lbl, idx) => {
+          const val = ds.data[idx];
+          const x = padding.left + idx * stepX;
+          const y = padding.top + chartHeight - ((val - minVal) / range) * chartHeight;
+          ctx.beginPath();
+          ctx.arc(x, y, 3.5, 0, Math.PI * 2);
+          ctx.fill();
+        });
+      });
     }
   };
 
@@ -235,6 +372,7 @@
       this.bindEvents();
       this.renderVerificationTab();
       this.renderDashboardTab();
+      this.renderMultiStoreCompareTab();
       this.renderChannelEconomicsTab();
       this.renderEventsImpactTab();
       this.renderSentimentPipelineTab();
@@ -253,6 +391,7 @@
           state.currentTab = tabId;
 
           if (tabId === 'tab-dashboard') this.renderDashboardTab();
+          if (tabId === 'tab-compare') this.renderMultiStoreCompareTab();
           if (tabId === 'tab-channels') this.renderChannelEconomicsTab();
           if (tabId === 'tab-events') this.renderEventsImpactTab();
           if (tabId === 'tab-sentiment') this.renderSentimentPipelineTab();
@@ -263,6 +402,7 @@
         state.theme = state.theme === 'dark' ? 'light' : 'dark';
         document.documentElement.setAttribute('data-theme', state.theme);
         this.renderDashboardTab();
+        if (state.currentTab === 'tab-compare') this.renderMultiStoreCompareTab();
       });
 
       ['filterStore', 'filterCity', 'filterFormat', 'filterMonth'].forEach(id => {
@@ -341,8 +481,26 @@
         if (e.target.files.length) this.handleFileUpload(e.target.files);
       });
 
+      // Multi-Store Comparison Filters
+      const compTime = $('compareTimeWindow');
+      if (compTime) {
+        compTime.addEventListener('change', (e) => {
+          state.compareTimeWindow = e.target.value;
+          this.renderMultiStoreCompareTab();
+        });
+      }
+
+      const compMetric = $('compareMetricType');
+      if (compMetric) {
+        compMetric.addEventListener('change', (e) => {
+          state.compareMetricType = e.target.value;
+          this.renderMultiStoreCompareTab();
+        });
+      }
+
       window.addEventListener('resize', () => {
         if (state.currentTab === 'tab-dashboard') this.renderDashboardTab();
+        if (state.currentTab === 'tab-compare') this.renderMultiStoreCompareTab();
       });
     },
 
@@ -669,7 +827,493 @@
       });
     },
 
-    // --- TAB 3: CHANNEL ECONOMICS & PROFIT DRAINS ---
+    // --- TAB 3: MULTI-STORE PROFIT / LOSS COMPARISON ENGINE ---
+    applyComparePreset(presetType) {
+      const stores = state.data.stores || [];
+      if (presetType === 'leeds') {
+        state.compareSelectedStores = ['S03', 'S12'];
+      } else if (presetType === 'manchester') {
+        state.compareSelectedStores = ['S05', 'S06', 'S07'];
+      } else if (presetType === 'sheffield') {
+        state.compareSelectedStores = ['S01', 'S02', 'S11'];
+      } else if (presetType === 'top_profit') {
+        const pnl = state.data.pnl_fixed || [];
+        const profitMap = {};
+        pnl.forEach(r => {
+          profitMap[r.store_id] = (profitMap[r.store_id] || 0) + Number(r.store_profit_gbp || 0);
+        });
+        const sorted = Object.entries(profitMap).sort((a, b) => b[1] - a[1]);
+        state.compareSelectedStores = sorted.slice(0, 3).map(item => item[0]);
+      } else if (presetType === 'select_all') {
+        state.compareSelectedStores = stores.map(s => s.store_id);
+      } else if (presetType === 'clear') {
+        state.compareSelectedStores = ['S01', 'S03'];
+      }
+      this.renderMultiStoreCompareTab();
+    },
+
+    toggleCompareStore(storeId) {
+      const idx = state.compareSelectedStores.indexOf(storeId);
+      if (idx >= 0) {
+        if (state.compareSelectedStores.length <= 1) {
+          alert('At least one store must remain selected for comparison.');
+          return;
+        }
+        state.compareSelectedStores.splice(idx, 1);
+      } else {
+        state.compareSelectedStores.push(storeId);
+      }
+      this.renderMultiStoreCompareTab();
+    },
+
+    renderMultiStoreCompareTab() {
+      const stores = state.data.stores || [];
+      const pnlAll = state.data.pnl_fixed || [];
+      const sentimentMap = state.data.store_sentiment_summary || {};
+      const selectedIds = state.compareSelectedStores || ['S03', 'S12'];
+
+      const timeWindow = ($('compareTimeWindow') && $('compareTimeWindow').value) || state.compareTimeWindow;
+      const metricType = ($('compareMetricType') && $('compareMetricType').value) || state.compareMetricType;
+
+      // 1. Render Store Chips
+      const chipsContainer = $('compareStoreChipsContainer');
+      if (chipsContainer) {
+        chipsContainer.innerHTML = '';
+        stores.forEach(s => {
+          const isSelected = selectedIds.includes(s.store_id);
+          const color = STORE_COLORS[s.store_id] || '#38bdf8';
+          const chip = document.createElement('div');
+          chip.className = `store-chip ${isSelected ? 'active' : ''}`;
+          if (isSelected) {
+            chip.style.borderColor = color;
+            chip.style.boxShadow = `0 0 8px ${color}40`;
+          }
+          chip.innerHTML = `
+            <span class="store-chip-dot" style="background: ${color};"></span>
+            <strong>${s.store_id}</strong> ${s.store_name}
+            <span style="font-size: 0.725rem; opacity: 0.75;">(${s.city})</span>
+          `;
+          chip.onclick = () => this.toggleCompareStore(s.store_id);
+          chipsContainer.appendChild(chip);
+        });
+      }
+
+      const counter = $('compareSelectionCounter');
+      if (counter) {
+        counter.textContent = `Selected: ${selectedIds.length} of ${stores.length} stores`;
+      }
+
+      // 2. Render Comparative Multi-Store Timeline Chart
+      const metricLabels = {
+        profit: 'Store Profit / Loss (£)',
+        margin: 'Store Margin (%)',
+        sales: 'Total Sales (£)',
+        footfall: 'Footfall Door Count'
+      };
+      if ($('compareChartMetricLabel')) {
+        $('compareChartMetricLabel').textContent = `Metric: ${metricLabels[metricType] || metricType}`;
+      }
+
+      const chartDatasets = [];
+      const legendContainer = $('compareChartLegend');
+      if (legendContainer) legendContainer.innerHTML = '';
+
+      selectedIds.forEach(id => {
+        const sInfo = stores.find(s => s.store_id === id) || { store_id: id, store_name: id };
+        const color = STORE_COLORS[id] || '#38bdf8';
+
+        const series = MONTH_LIST.map(m => {
+          const r = pnlAll.find(row => row.store_id === id && row.month === m);
+          if (!r) return 0;
+          if (metricType === 'profit') return Number(r.store_profit_gbp || 0);
+          if (metricType === 'margin') return Number(r.store_margin || 0) * 100;
+          if (metricType === 'sales') return Number(r.total_sales_gbp || 0);
+          if (metricType === 'footfall') return Number(r.door_count || 0);
+          return 0;
+        });
+
+        chartDatasets.push({
+          label: `${id} - ${sInfo.store_name}`,
+          color: color,
+          data: series
+        });
+
+        if (legendContainer) {
+          const badge = document.createElement('div');
+          badge.style.display = 'inline-flex';
+          badge.style.alignItems = 'center';
+          badge.style.gap = '0.35rem';
+          badge.style.padding = '3px 8px';
+          badge.style.borderRadius = '4px';
+          badge.style.background = 'var(--bg-secondary)';
+          badge.style.border = `1px solid ${color}`;
+          badge.style.fontSize = '0.75rem';
+          badge.innerHTML = `
+            <span style="width: 8px; height: 8px; border-radius: 50%; background: ${color};"></span>
+            <strong>${id}</strong> ${sInfo.store_name}
+          `;
+          legendContainer.appendChild(badge);
+        }
+      });
+
+      MicroChart.drawMultiStoreCompareChart(
+        'chartMultiStoreCompare',
+        MONTH_LIST.map(m => m.slice(5)),
+        chartDatasets,
+        metricType
+      );
+
+      // 3. Collect Aggregated Period Stats for each selected store
+      const storeStats = selectedIds.map(id => {
+        const sInfo = stores.find(s => s.store_id === id) || { store_id: id, store_name: id, city: '', format: '', store_manager: '' };
+        const sent = sentimentMap[id] || { avg_rating: 4.0, avg_sentiment: 0.3, sentiment_label: 'Positive', current_positives: [], things_to_improve: [] };
+
+        let rows = pnlAll.filter(r => r.store_id === id);
+        if (timeWindow !== 'ALL') {
+          rows = rows.filter(r => r.month === timeWindow);
+        }
+
+        const isOpen = rows.length > 0;
+        const sales = rows.reduce((acc, r) => acc + Number(r.total_sales_gbp || 0), 0);
+        const salesInStore = rows.reduce((acc, r) => acc + Number(r.sales_instore_gbp || 0), 0);
+        const salesApp = rows.reduce((acc, r) => acc + Number(r.sales_app_gbp || 0), 0);
+        const salesDelivery = rows.reduce((acc, r) => acc + Number(r.sales_delivery_gbp || 0), 0);
+        const receipts = rows.reduce((acc, r) => acc + Number(r.total_receipts || 0), 0);
+        const footfall = rows.reduce((acc, r) => acc + Number(r.door_count || 0), 0);
+        const tradingDays = rows.reduce((acc, r) => acc + Number(r.trading_days || 0), 0);
+
+        const foodCost = rows.reduce((acc, r) => acc + Number(r.food_cost_gbp || 0), 0);
+        const labourHours = rows.reduce((acc, r) => acc + Number(r.labour_hours || 0), 0);
+        const labourCost = rows.reduce((acc, r) => acc + Number(r.labour_cost_gbp || 0), 0);
+        const deliveryComm = rows.reduce((acc, r) => acc + Number(r.delivery_commission_gbp || 0), 0);
+        const deliveryPkg = rows.reduce((acc, r) => acc + Number(r.delivery_packaging_gbp || 0), 0);
+        const rent = rows.reduce((acc, r) => acc + Number(r.rent_gbp || 0), 0);
+        const rates = rows.reduce((acc, r) => acc + Number(r.business_rates_gbp || 0), 0);
+        const utilities = rows.reduce((acc, r) => acc + Number(r.utilities_gbp || 0), 0);
+        const repairs = rows.reduce((acc, r) => acc + Number(r.repairs_maintenance_gbp || 0), 0);
+        const otherOpex = rows.reduce((acc, r) => acc + Number(r.other_opex_gbp || 0), 0);
+        const wasteCost = rows.reduce((acc, r) => acc + Number(r.waste_cost_gbp || 0), 0);
+        const profit = rows.reduce((acc, r) => acc + Number(r.store_profit_gbp || 0), 0);
+        const margin = sales > 0 ? profit / sales : 0;
+        const conv = footfall > 0 ? receipts / footfall : 0;
+        const ticket = receipts > 0 ? sales / receipts : 0;
+        const headcount = rows.length ? rows[rows.length - 1].headcount : (sInfo.headcount || '-');
+        const leavers = rows.reduce((acc, r) => acc + Number(r.leavers || 0), 0);
+
+        return {
+          id,
+          sInfo,
+          sent,
+          isOpen,
+          sales,
+          salesInStore,
+          salesApp,
+          salesDelivery,
+          receipts,
+          footfall,
+          tradingDays,
+          foodCost,
+          labourHours,
+          labourCost,
+          deliveryComm,
+          deliveryPkg,
+          rent,
+          rates,
+          utilities,
+          repairs,
+          otherOpex,
+          wasteCost,
+          profit,
+          margin,
+          conv,
+          ticket,
+          headcount,
+          leavers,
+          totalCosts: foodCost + labourCost + deliveryComm + deliveryPkg + rent + rates + utilities + repairs + otherOpex
+        };
+      });
+
+      // 4. Render Head-to-Head Cards
+      const cardsGrid = $('compareCardsGrid');
+      if (cardsGrid) {
+        cardsGrid.innerHTML = '';
+        storeStats.forEach(st => {
+          const color = STORE_COLORS[st.id] || '#38bdf8';
+          const card = document.createElement('div');
+          card.className = 'compare-store-card';
+          card.style.borderTopColor = color;
+
+          if (!st.isOpen) {
+            card.innerHTML = `
+              <div class="compare-store-header">
+                <div>
+                  <div style="font-size: 0.75rem; color: var(--text-muted); font-weight: 700;">${st.sInfo.city} · ${st.sInfo.format}</div>
+                  <h3 style="font-size: 1.05rem; font-weight: 800; margin-top: 2px;"><span style="color: ${color};">●</span> ${st.id} - ${st.sInfo.store_name}</h3>
+                </div>
+                <span class="status-badge pending">Pre-Opening</span>
+              </div>
+              <div style="padding: 2rem 1rem; text-align: center; color: var(--text-muted); font-size: 0.85rem;">
+                Not trading in selected period (${timeWindow}). Store opened on ${st.sInfo.opened_date}.
+              </div>
+            `;
+            cardsGrid.appendChild(card);
+            return;
+          }
+
+          const isProfitable = st.profit >= 0;
+          card.innerHTML = `
+            <div class="compare-store-header">
+              <div>
+                <div style="font-size: 0.75rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">
+                  ${st.sInfo.city} · ${st.sInfo.format} (${st.sInfo.location_type || 'High street'})
+                </div>
+                <h3 style="font-size: 1.05rem; font-weight: 800; margin-top: 2px;">
+                  <span style="color: ${color};">●</span> ${st.id} - ${st.sInfo.store_name}
+                </h3>
+              </div>
+              <span class="status-badge ${isProfitable ? 'reconciled' : 'pending'}" style="font-size: 0.725rem;">
+                ${isProfitable ? '✓ Profitable' : '⚠️ Loss-Making'}
+              </span>
+            </div>
+
+            <div style="background: var(--bg-secondary); padding: 0.75rem; border-radius: var(--radius-sm); margin-bottom: 0.75rem; display: flex; justify-content: space-between; align-items: baseline;">
+              <div>
+                <div style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">Store Profit / Loss</div>
+                <div style="font-size: 1.35rem; font-weight: 800; color: ${isProfitable ? 'var(--success)' : 'var(--danger)'};">
+                  ${formatGBP(st.profit)}
+                </div>
+              </div>
+              <div style="text-align: right;">
+                <div style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">Margin</div>
+                <div style="font-size: 1.15rem; font-weight: 800; color: ${st.margin >= 0.15 ? 'var(--success)' : (st.margin >= 0 ? 'var(--warning)' : 'var(--danger)')};">
+                  ${formatPct(st.margin)}
+                </div>
+              </div>
+            </div>
+
+            <div class="compare-metric-row">
+              <span>Total Revenue:</span>
+              <strong>${formatGBP(st.sales)}</strong>
+            </div>
+            <div class="compare-metric-row">
+              <span>Food Cost (COGS):</span>
+              <span>${formatGBP(st.foodCost)} <span style="font-size: 0.7rem; color: var(--text-muted);">(${st.sales > 0 ? formatPct(st.foodCost / st.sales) : '0%'})</span></span>
+            </div>
+            <div class="compare-metric-row">
+              <span>Labour Cost:</span>
+              <span>${formatGBP(st.labourCost)} <span style="font-size: 0.7rem; color: var(--text-muted);">(${st.sales > 0 ? formatPct(st.labourCost / st.sales) : '0%'})</span></span>
+            </div>
+            <div class="compare-metric-row">
+              <span>Delivery Partner Deductions:</span>
+              <span style="color: var(--danger);">${formatGBP(st.deliveryComm + st.deliveryPkg)}</span>
+            </div>
+            <div class="compare-metric-row">
+              <span>Fixed Property Overheads:</span>
+              <span>${formatGBP(st.rent + st.rates + st.utilities)}</span>
+            </div>
+            <div class="compare-metric-row">
+              <span>Footfall & Conversion:</span>
+              <span>${formatInt(st.footfall)} <span style="font-size: 0.7rem; color: var(--text-muted);">(${formatPct(st.conv)} conv.)</span></span>
+            </div>
+            <div class="compare-metric-row">
+              <span>Customer Sentiment:</span>
+              <span>★ <strong>${st.sent.avg_rating.toFixed(2)}</strong> <span class="badge-tag info" style="font-size: 0.65rem; padding: 1px 5px;">${st.sent.sentiment_label}</span></span>
+            </div>
+            <div style="font-size: 0.725rem; color: var(--text-dim); margin-top: 0.6rem; display: flex; justify-content: space-between;">
+              <span>Manager: <strong>${st.sInfo.store_manager || 'N/A'}</strong></span>
+              <span>Size: <strong>${st.sInfo.seats || '0'} seats / ${st.sInfo.sqft || '0'} sqft</strong></span>
+            </div>
+          `;
+          cardsGrid.appendChild(card);
+        });
+      }
+
+      // 5. Render Detailed Side-by-Side Financial Comparison Table
+      const timeLabel = $('compareTableTimeLabel');
+      if (timeLabel) {
+        timeLabel.textContent = timeWindow === 'ALL' ? 'Full Year (2025-07 to 2026-06)' : `Month: ${timeWindow}`;
+      }
+
+      const theadRow = $('compareTableHeadRow');
+      const tbody = $('compareTableBody');
+      if (theadRow && tbody) {
+        theadRow.innerHTML = '';
+        tbody.innerHTML = '';
+
+        const thMetric = document.createElement('th');
+        thMetric.textContent = 'Line Item / Financial Metric';
+        theadRow.appendChild(thMetric);
+
+        storeStats.forEach(st => {
+          const th = document.createElement('th');
+          th.style.textAlign = 'right';
+          th.style.color = STORE_COLORS[st.id] || 'var(--text-main)';
+          th.textContent = `${st.id} - ${st.sInfo.store_name}`;
+          theadRow.appendChild(th);
+        });
+
+        // Variance or Average Column
+        let hasVarianceCol = false;
+        let isTwoStores = storeStats.length === 2;
+        if (isTwoStores) {
+          hasVarianceCol = true;
+          const thVar = document.createElement('th');
+          thVar.style.textAlign = 'right';
+          thVar.style.background = 'rgba(56, 189, 248, 0.08)';
+          thVar.style.color = 'var(--accent-primary)';
+          thVar.textContent = `Variance (Δ ${storeStats[0].id} vs ${storeStats[1].id})`;
+          theadRow.appendChild(thVar);
+        } else if (storeStats.length >= 3) {
+          hasVarianceCol = true;
+          const thAvg = document.createElement('th');
+          thAvg.style.textAlign = 'right';
+          thAvg.style.background = 'rgba(56, 189, 248, 0.08)';
+          thAvg.style.color = 'var(--accent-primary)';
+          thAvg.textContent = 'Selected Stores Benchmark Avg';
+          theadRow.appendChild(thAvg);
+        }
+
+        // Table Rows Definition
+        const addSectionHeader = (title) => {
+          const tr = document.createElement('tr');
+          const colSpan = storeStats.length + (hasVarianceCol ? 2 : 1);
+          tr.innerHTML = `<td colspan="${colSpan}" style="background: var(--bg-tertiary); font-weight: 800; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent-primary); padding: 0.5rem 0.85rem;">${title}</td>`;
+          tbody.appendChild(tr);
+        };
+
+        const addRow = (label, getter, type = 'gbp', highlight = false, isGoodWhenHigher = true) => {
+          const tr = document.createElement('tr');
+          if (highlight) tr.style.background = 'rgba(255, 255, 255, 0.03)';
+
+          let html = `<td style="font-weight: ${highlight ? '700' : 'normal'};">${label}</td>`;
+          const vals = storeStats.map(st => getter(st));
+
+          vals.forEach((v, idx) => {
+            let str = '';
+            let style = 'text-align: right;';
+            if (highlight) style += ' font-weight: 700;';
+
+            if (!storeStats[idx].isOpen) {
+              str = '<span style="color: var(--text-dim);">-</span>';
+            } else if (type === 'gbp') {
+              if (highlight && label.includes('Profit')) {
+                style += ` color: ${v >= 0 ? 'var(--success)' : 'var(--danger)'};`;
+              }
+              str = formatGBP(v);
+            } else if (type === 'pct') {
+              str = formatPct(v);
+            } else if (type === 'int') {
+              str = formatInt(v);
+            } else {
+              str = v;
+            }
+            html += `<td style="${style}">${str}</td>`;
+          });
+
+          if (isTwoStores) {
+            const v0 = vals[0];
+            const v1 = vals[1];
+            let varHtml = '';
+            if (typeof v0 === 'number' && typeof v1 === 'number') {
+              const delta = v0 - v1;
+              const pct = v1 !== 0 ? (delta / Math.abs(v1)) * 100 : 0;
+              const isPositive = delta >= 0;
+              let color = 'inherit';
+              if (type === 'gbp' || type === 'pct' || type === 'int') {
+                if (isGoodWhenHigher) color = isPositive ? 'var(--success)' : 'var(--danger)';
+                else color = isPositive ? 'var(--danger)' : 'var(--success)';
+              }
+              const prefix = isPositive ? '+' : '';
+              if (type === 'gbp') {
+                varHtml = `<span style="color: ${color}; font-weight: 700;">${prefix}${formatGBP(delta)}</span> <span style="font-size: 0.7rem; color: var(--text-muted);">(${prefix}${pct.toFixed(1)}%)</span>`;
+              } else if (type === 'pct') {
+                varHtml = `<span style="color: ${color}; font-weight: 700;">${prefix}${(delta * 100).toFixed(1)}% pts</span>`;
+              } else if (type === 'int') {
+                varHtml = `<span style="color: ${color}; font-weight: 700;">${prefix}${formatInt(delta)}</span> <span style="font-size: 0.7rem; color: var(--text-muted);">(${prefix}${pct.toFixed(1)}%)</span>`;
+              }
+            } else {
+              varHtml = '<span style="color: var(--text-dim);">-</span>';
+            }
+            html += `<td style="text-align: right; background: rgba(56, 189, 248, 0.04);">${varHtml}</td>`;
+          } else if (storeStats.length >= 3) {
+            const openStats = storeStats.filter(st => st.isOpen);
+            let avgHtml = '';
+            if (typeof vals[0] === 'number') {
+              const sum = openStats.reduce((acc, st) => acc + getter(st), 0);
+              const avg = openStats.length ? sum / openStats.length : 0;
+              if (type === 'gbp') avgHtml = `<strong>${formatGBP(avg)}</strong>`;
+              else if (type === 'pct') avgHtml = `<strong>${formatPct(avg)}</strong>`;
+              else if (type === 'int') avgHtml = `<strong>${formatInt(Math.round(avg))}</strong>`;
+            } else {
+              avgHtml = '-';
+            }
+            html += `<td style="text-align: right; background: rgba(56, 189, 248, 0.04);">${avgHtml}</td>`;
+          }
+
+          tr.innerHTML = html;
+          tbody.appendChild(tr);
+        };
+
+        // Section 1: Store Profile
+        addSectionHeader('📍 Store Profile & Operations');
+        addRow('Store Format & Location', st => `${st.sInfo.format} (${st.sInfo.location_type})`, 'text');
+        addRow('Trading Days in Period', st => st.tradingDays, 'int');
+        addRow('Store Capacity & Space', st => `${st.sInfo.seats || '0'} seats · ${st.sInfo.sqft || '0'} sqft`, 'text');
+        addRow('Store Manager', st => st.sInfo.store_manager || 'N/A', 'text');
+
+        // Section 2: Footfall & Volume
+        addSectionHeader('🚶 Footfall, Volume & Conversion');
+        addRow('Reconciled Door Count (Footfall)', st => st.footfall, 'int', false, true);
+        addRow('Total Transactions (Receipts)', st => st.receipts, 'int', false, true);
+        addRow('Footfall Conversion Rate', st => st.conv, 'pct', false, true);
+        addRow('Average Ticket Size', st => st.ticket, 'gbp', false, true);
+
+        // Section 3: Revenue Channels
+        addSectionHeader('💳 Revenue Mix by Sales Channel');
+        addRow('In-Store Walk-in Sales', st => st.salesInStore, 'gbp', false, true);
+        addRow('App Click & Collect Sales', st => st.salesApp, 'gbp', false, true);
+        addRow('Third-Party Delivery Sales', st => st.salesDelivery, 'gbp', false, true);
+        addRow('Total Revenue / Sales', st => st.sales, 'gbp', true, true);
+
+        // Section 4: COGS & Labour
+        addSectionHeader('🥐 Cost of Goods Sold (COGS) & Labour');
+        addRow('Food Cost (COGS)', st => st.foodCost, 'gbp', false, false);
+        addRow('Food Cost % of Revenue', st => st.sales > 0 ? st.foodCost / st.sales : 0, 'pct', false, false);
+        addRow('Food Waste Cost', st => st.wasteCost, 'gbp', false, false);
+        addRow('Scheduled Labour Hours', st => st.labourHours, 'int', false, false);
+        addRow('Total Labour Payroll', st => st.labourCost, 'gbp', false, false);
+        addRow('Labour Cost % of Revenue', st => st.sales > 0 ? st.labourCost / st.sales : 0, 'pct', false, false);
+
+        // Section 5: Delivery Deductions
+        addSectionHeader('🛵 Third-Party Delivery Deductions');
+        addRow('Platform Commissions (27-33%)', st => st.deliveryComm, 'gbp', false, false);
+        addRow('Delivery Packaging Costs (45p/order)', st => st.deliveryPkg, 'gbp', false, false);
+        addRow('Total Delivery Direct Deductions', st => st.deliveryComm + st.deliveryPkg, 'gbp', true, false);
+
+        // Section 6: Fixed Overheads
+        addSectionHeader('🏢 Property & Operational Overheads');
+        addRow('Premises Rent', st => st.rent, 'gbp', false, false);
+        addRow('Business Rates', st => st.rates, 'gbp', false, false);
+        addRow('Utilities (Energy & Water)', st => st.utilities, 'gbp', false, false);
+        addRow('Repairs & Maintenance', st => st.repairs, 'gbp', false, false);
+        addRow('Other Operating Expenses (Opex)', st => st.otherOpex, 'gbp', false, false);
+        addRow('Total Store Operating Costs', st => st.totalCosts, 'gbp', true, false);
+
+        // Section 7: Profitability
+        addSectionHeader('📊 Net Profitability & Contribution');
+        addRow('Store Net Profit / Loss (GBP)', st => st.profit, 'gbp', true, true);
+        addRow('Store Net Profit Margin (%)', st => st.margin, 'pct', true, true);
+
+        // Section 8: Sentiment
+        addSectionHeader('⭐ Customer Feedback & Sentiment');
+        addRow('Average Google Review Star Rating', st => st.sent.avg_rating, 'text');
+        addRow('AI Sentiment Score (-1.0 to +1.0)', st => `${st.sent.avg_sentiment >= 0 ? '+' : ''}${st.sent.avg_sentiment.toFixed(3)} (${st.sent.sentiment_label})`, 'text');
+        addRow('Current Positives Highlight', st => (st.sent.current_positives && st.sent.current_positives.length) ? st.sent.current_positives.slice(0, 2).join('; ') : 'Quality coffee & staff', 'text');
+        addRow('Areas for Improvement', st => (st.sent.things_to_improve && st.sent.things_to_improve.length) ? st.sent.things_to_improve.slice(0, 2).join('; ') : 'Wait times during peak', 'text');
+      }
+    },
+
+    // --- TAB 4: CHANNEL ECONOMICS & PROFIT DRAINS ---
     renderChannelEconomicsTab() {
       const channels = state.data.channel_comparison || [];
       const grid = $('channelCardsGrid');

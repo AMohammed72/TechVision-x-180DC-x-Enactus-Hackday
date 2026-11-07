@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Grind & Crumb - Data Verifier, Reconciliation & Executive Dashboard</title>
   <link rel="stylesheet" href="style.css">
-  <meta name="description" content="Ultra-optimized cross-dataset verifier, discrepancy audit reporter, channel economics, business events impact, and sentiment pipeline dashboard.">
+  <meta name="description" content="Ultra-optimized cross-dataset verifier, discrepancy audit reporter, multi-store comparison, channel economics, and events trajectory dashboard.">
 </head>
 <body>
   <!-- Header -->
@@ -14,7 +14,7 @@
       <div class="brand-logo">GC</div>
       <div class="brand-title">
         <h1>Grind & Crumb <span class="badge-tag" id="statusBadge">Audited & Reconciled</span></h1>
-        <div class="brand-subtitle">Data Verifier, Channel Economics, Events Trajectory & Sentiment Intelligence</div>
+        <div class="brand-subtitle">Data Verifier, Multi-Store Comparison, Channel Economics & Events Trajectory</div>
       </div>
     </div>
     <div class="header-controls">
@@ -38,6 +38,9 @@
     </div>
     <div class="nav-tab" data-tab="tab-dashboard">
       📊 Executive P&L Dashboard
+    </div>
+    <div class="nav-tab" data-tab="tab-compare">
+      ⚖️ Multi-Store Comparison
     </div>
     <div class="nav-tab" data-tab="tab-channels">
       💰 Channel Economics & Profit Drains
@@ -237,7 +240,7 @@
         </div>
       </div>
 
-      <!-- Charts Row 1 with Integrated Events Trajectory -->
+      <!-- Trajectory Chart with Event Integration -->
       <div class="charts-grid-2">
         <div class="dashboard-card" style="grid-column: 1 / -1;">
           <div class="card-header-flex">
@@ -248,7 +251,6 @@
             <canvas class="chart-canvas" id="chartMonthlyTrends"></canvas>
           </div>
 
-          <!-- Event Trajectory Impact Tracker (Directly under chart) -->
           <div class="event-tracker-panel" id="eventTrackerPanel">
             <div class="event-tracker-header">
               <h4 style="font-size: 0.85rem; font-weight: 700; display: flex; align-items: center; gap: 0.4rem;">
@@ -256,9 +258,7 @@
               </h4>
               <span style="font-size: 0.75rem; color: var(--text-muted);">Displays profit increases/decreases across each business event</span>
             </div>
-            <div class="event-tracker-grid" id="eventTrackerCardsContainer">
-              <!-- Rendered via JS -->
-            </div>
+            <div class="event-tracker-grid" id="eventTrackerCardsContainer"></div>
           </div>
         </div>
       </div>
@@ -284,11 +284,11 @@
         </div>
       </div>
 
-      <!-- Store Performance League Table with Sentiment & Star Rating Sorting -->
+      <!-- Store Performance League Table -->
       <div class="dashboard-card">
         <div class="card-header-flex">
           <h2><span>🏆</span> Store Performance League Table</h2>
-          <span style="font-size: 0.75rem; color: var(--text-muted);">Click any header to sort by profit, margin, footfall, star rating, or sentiment score</span>
+          <span style="font-size: 0.75rem; color: var(--text-muted);">Click any header to sort by profit, margin, star rating, or sentiment score</span>
         </div>
         <div class="table-responsive">
           <table class="data-table" id="storeLeagueTable">
@@ -315,7 +315,102 @@
     </section>
 
     <!-- ========================================== -->
-    <!-- TAB 3: CHANNEL ECONOMICS & PROFIT DRAINS   -->
+    <!-- TAB 3: MULTI-STORE COMPARISON (NEW!)       -->
+    <!-- ========================================== -->
+    <section class="tab-panel" id="tab-compare">
+      <div class="dashboard-card">
+        <div class="card-header-flex">
+          <h2><span>⚖️</span> Multi-Store Profit / Loss Comparison Engine</h2>
+          <span class="badge-tag info">Compare 2 or More Stores</span>
+        </div>
+        <p style="font-size: 0.825rem; color: var(--text-muted); margin-bottom: 1rem;">
+          Select two or more stores below to compare their revenue, cost structures, and monthly profit/loss trajectory side-by-side at any given time.
+        </p>
+
+        <!-- Quick Comparison Presets -->
+        <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-bottom: 0.85rem;">
+          <span style="font-size: 0.775rem; color: var(--text-muted); font-weight: 700;">Quick Presets:</span>
+          <button class="btn btn-outline btn-sm" onclick="App.applyComparePreset('leeds')">Leeds: S03 vs S12</button>
+          <button class="btn btn-outline btn-sm" onclick="App.applyComparePreset('manchester')">Manchester: S05 vs S06 vs S07</button>
+          <button class="btn btn-outline btn-sm" onclick="App.applyComparePreset('sheffield')">Sheffield: S01 vs S02 vs S11</button>
+          <button class="btn btn-outline btn-sm" onclick="App.applyComparePreset('top_profit')">Top 3 Profit Leaders</button>
+          <button class="btn btn-secondary btn-sm" onclick="App.applyComparePreset('select_all')">Select All (12)</button>
+          <button class="btn btn-outline btn-sm" onclick="App.applyComparePreset('clear')">Clear Selection</button>
+        </div>
+
+        <!-- Store Selection Chips -->
+        <div class="store-chip-group" id="compareStoreChipsContainer">
+          <!-- Rendered via JS -->
+        </div>
+
+        <!-- Comparison Filter Toolbar -->
+        <div class="filter-bar">
+          <div class="filter-group">
+            <label for="compareTimeWindow">Time Window / Month:</label>
+            <select class="filter-select" id="compareTimeWindow">
+              <option value="ALL">Full Year (2025-07 to 2026-06)</option>
+              <option value="2025-07">2025-07 (July)</option>
+              <option value="2025-08">2025-08 (August)</option>
+              <option value="2025-09">2025-09 (September - Trinity opens)</option>
+              <option value="2025-10">2025-10 (October)</option>
+              <option value="2025-11">2025-11 (November)</option>
+              <option value="2025-12">2025-12 (December)</option>
+              <option value="2026-01">2026-01 (January - Oat Surcharge)</option>
+              <option value="2026-02">2026-02 (February)</option>
+              <option value="2026-03">2026-03 (March - App v3.0)</option>
+              <option value="2026-04">2026-04 (April - Wage rise & Dashly hike)</option>
+              <option value="2026-05">2026-05 (May)</option>
+              <option value="2026-06">2026-06 (June)</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label for="compareMetricType">Trajectory Metric:</label>
+            <select class="filter-select" id="compareMetricType">
+              <option value="profit">Store Profit / Loss (£)</option>
+              <option value="margin">Profit Margin (%)</option>
+              <option value="sales">Total Sales (£)</option>
+              <option value="footfall">Footfall Door Count</option>
+            </select>
+          </div>
+          <span style="font-size: 0.8rem; color: var(--text-muted); margin-left: auto;" id="compareSelectionCounter">
+            Selected: 2 stores
+          </span>
+        </div>
+
+        <!-- Comparative Multi-Store Timeline Chart -->
+        <div class="dashboard-card" style="background: var(--bg-primary); border-color: var(--border-color); margin-bottom: 1.25rem;">
+          <div class="card-header-flex">
+            <h3><span>📈</span> Side-by-Side Profit / Loss Timeline</h3>
+            <span style="font-size: 0.75rem; color: var(--text-muted);" id="compareChartMetricLabel">Metric: Store Profit / Loss (£)</span>
+          </div>
+          <div id="compareChartLegend" style="display: flex; flex-wrap: wrap; gap: 0.65rem; align-items: center; margin-bottom: 0.75rem; font-size: 0.775rem;"></div>
+          <div class="chart-wrapper" style="height: 310px;">
+            <canvas class="chart-canvas" id="chartMultiStoreCompare"></canvas>
+          </div>
+        </div>
+
+        <!-- Head-to-Head Cards Grid -->
+        <div class="compare-grid" id="compareCardsGrid">
+          <!-- Rendered via JS -->
+        </div>
+
+        <!-- Side-by-Side Detailed Breakdown Table -->
+        <h3 style="font-size: 0.95rem; font-weight: 700; margin: 1.5rem 0 0.75rem 0;">
+          Detailed Financial Comparison Table (<span id="compareTableTimeLabel">Full Year</span>)
+        </h3>
+        <div class="table-responsive">
+          <table class="data-table" id="compareDetailTable">
+            <thead>
+              <tr id="compareTableHeadRow"></tr>
+            </thead>
+            <tbody id="compareTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================== -->
+    <!-- TAB 4: CHANNEL ECONOMICS & PROFIT DRAINS   -->
     <!-- ========================================== -->
     <section class="tab-panel" id="tab-channels">
       <div class="dashboard-card">
@@ -366,7 +461,7 @@
     </section>
 
     <!-- ========================================== -->
-    <!-- TAB 4: BUSINESS EVENTS IMPACT              -->
+    <!-- TAB 5: BUSINESS EVENTS IMPACT              -->
     <!-- ========================================== -->
     <section class="tab-panel" id="tab-events">
       <div class="dashboard-card">
@@ -375,11 +470,10 @@
           <span class="badge-tag info">Event-Study Econometric Analysis</span>
         </div>
 
-        <!-- Modularity Architecture Callout -->
         <div class="modularity-box">
           <h4>🧩 Architecture Modularity: How Dynamic Ingestion Works</h4>
           <p>
-            Every section of this application is decoupled and reactive. If a user appends a new event row to <code>business_events.csv</code> (e.g. <code>Summer Menu Launch, 2026-05-01, Introduced cold brew range</code>) or drops an updated CSV into Tab 7:
+            Every section of this application is decoupled and reactive. If a user appends a new event row to <code>business_events.csv</code> (e.g. <code>Summer Menu Launch, 2026-05-01, Introduced cold brew range</code>) or drops an updated CSV into Tab 8:
           </p>
           <ul style="margin-left: 1.25rem; margin-top: 0.35rem; line-height: 1.5;">
             <li><strong>Auto-Event Detection</strong>: The dynamic pipeline parses the event date, maps it to its timeline window, and calculates pre- vs post-event financial shifts automatically.</li>
@@ -393,7 +487,7 @@
     </section>
 
     <!-- ========================================== -->
-    <!-- TAB 5: SENTIMENT PIPELINE & STORE INSIGHTS -->
+    <!-- TAB 6: SENTIMENT PIPELINE & STORE INSIGHTS -->
     <!-- ========================================== -->
     <section class="tab-panel" id="tab-sentiment">
       <div class="dashboard-card">
@@ -407,7 +501,6 @@
           Enriched dataset of 3,030 customer reviews categorized by store with average sentiment, star ratings, current operational positives, and actionable things to improve.
         </p>
 
-        <!-- Sentiment Sorting & Store Filtering Controls -->
         <div class="filter-bar">
           <div class="filter-group">
             <label for="sentimentStoreFilter">Store:</label>
@@ -436,7 +529,7 @@
     </section>
 
     <!-- ========================================== -->
-    <!-- TAB 6: CATCHMENT & EXPANSION               -->
+    <!-- TAB 7: CATCHMENT & EXPANSION               -->
     <!-- ========================================== -->
     <section class="tab-panel" id="tab-catchment">
       <div class="dashboard-card">
@@ -474,7 +567,7 @@
     </section>
 
     <!-- ========================================== -->
-    <!-- TAB 7: DATA EXPLORER & DRAG/DROP           -->
+    <!-- TAB 8: DATA EXPLORER & DRAG/DROP           -->
     <!-- ========================================== -->
     <section class="tab-panel" id="tab-explorer">
       <div class="dashboard-card">
