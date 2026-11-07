@@ -276,6 +276,7 @@ def run():
     sentiment_data = load_csv(os.path.join(WORKSPACE_DIR, "customer_reviews_sentiment.csv"))
     survey_raw = load_csv(os.path.join(DATA_DIR, "customer_survey.csv"))
     events_raw = load_csv(os.path.join(DATA_DIR, "business_events.csv"))
+    promotions_raw = load_csv(os.path.join(DATA_DIR, "promotions.csv"))
 
     # Ensure Dashly contract renewal is included as an event if not present
     event_names = [e['event'].lower() for e in events_raw]
@@ -346,6 +347,7 @@ def run():
                 desc = "Grand opening: Store S12 opened mid-September, establishing our second Leeds retail location."
 
             scope_events.append({
+                'item_type': 'event',
                 'event': ev['event'],
                 'date': ev['date'],
                 'month': ev_month,
@@ -362,6 +364,91 @@ def run():
                 'pct_sales': round(pct_sales, 1),
                 'description': desc
             })
+
+        # Dynamically integrate promotion campaigns from promotions.csv for this scope
+        for pr in promotions_raw:
+            promo_id = pr.get('promo_id', '').strip()
+            promo_name = pr.get('promo_name', '').strip()
+            mechanic = pr.get('mechanic', '').strip()
+            start_d = pr.get('start_date', '').strip()
+            end_d = pr.get('end_date', '').strip()
+            stores_str = pr.get('stores', 'All').strip()
+            cat_name = pr.get('category', 'All').strip()
+            spend_gbp = float(pr.get('marketing_spend_gbp', 0) or 0)
+
+            target_stores = [s.strip() for s in stores_str.split(';') if s.strip()] if stores_str.lower() != 'all' else ['ALL']
+            if scope != "ALL" and 'ALL' not in target_stores and scope not in target_stores:
+                continue
+
+            start_m = start_d[:7]
+            end_m = end_d[:7] if end_d else start_m
+            m_idx = MONTH_ORDER.index(start_m) if start_m in MONTH_ORDER else -1
+            if m_idx == -1:
+                continue
+
+            pre_m = MONTH_ORDER[m_idx - 1] if m_idx > 0 else start_m
+            post_m = start_m if start_m in scope_metrics else (MONTH_ORDER[m_idx + 1] if m_idx < len(MONTH_ORDER) - 1 else start_m)
+
+            # Calculate metrics using target stores when scope == ALL and promo is store-specific
+            if scope == "ALL" and 'ALL' not in target_stores:
+                pre_rows = [r for r in pnl if r['month'] == pre_m and r['store_id'] in target_stores]
+                post_rows = [r for r in pnl if r['month'] == post_m and r['store_id'] in target_stores]
+                pre_profit = sum(float(r['store_profit_gbp']) for r in pre_rows)
+                post_profit = sum(float(r['store_profit_gbp']) for r in post_rows)
+                pre_sales = sum(float(r['total_sales_gbp']) for r in pre_rows)
+                post_sales = sum(float(r['total_sales_gbp']) for r in post_rows)
+            else:
+                pre_profit = scope_metrics[pre_m]['profit']
+                post_profit = scope_metrics[post_m]['profit']
+                pre_sales = scope_metrics[pre_m]['sales']
+                post_sales = scope_metrics[post_m]['sales']
+
+            delta_profit = post_profit - pre_profit
+            pct_profit = (delta_profit / abs(pre_profit) * 100) if pre_profit != 0 else 0.0
+            delta_sales = post_sales - pre_sales
+            pct_sales = (delta_sales / abs(pre_sales) * 100) if pre_sales != 0 else 0.0
+
+            if 'ALL' in target_stores:
+                scope_desc = f"all {len(stores)} chain stores"
+            else:
+                named = [f"{sid} ({stores[sid]['store_name']})" if sid in stores else sid for sid in target_stores]
+                scope_desc = f"{len(target_stores)} targeted store{'s' if len(target_stores) > 1 else ''} ({', '.join(named[:3])}{'...' if len(named) > 3 else ''})"
+
+            roi_ratio = (delta_profit / spend_gbp) if spend_gbp > 0 else 0.0
+            dyn_desc = (
+                f"Campaign {promo_id} ({cat_name}): {mechanic}. "
+                f"Active {start_d} to {end_d} across {scope_desc} with £{spend_gbp:,.0f} marketing spend "
+                f"(Sales shift: {'+' if delta_sales >= 0 else '-'}£{abs(delta_sales):,.0f} [{pct_sales:+.1f}%], "
+                f"Net profit vs spend: {roi_ratio:+.2f}x)."
+            )
+
+            scope_events.append({
+                'item_type': 'promotion',
+                'promo_id': promo_id,
+                'event': f"Promo: {promo_name} ({promo_id})",
+                'date': start_d,
+                'end_date': end_d,
+                'month': start_m,
+                'end_month': end_m,
+                'month_idx': m_idx,
+                'pre_month': pre_m,
+                'post_month': post_m,
+                'pre_profit': round(pre_profit, 2),
+                'post_profit': round(post_profit, 2),
+                'delta_profit': round(delta_profit, 2),
+                'pct_profit': round(pct_profit, 1),
+                'pre_sales': round(pre_sales, 2),
+                'post_sales': round(post_sales, 2),
+                'delta_sales': round(delta_sales, 2),
+                'pct_sales': round(pct_sales, 1),
+                'stores': stores_str,
+                'category': cat_name,
+                'marketing_spend_gbp': round(spend_gbp, 2),
+                'mechanic': mechanic,
+                'description': dyn_desc
+            })
+
+        scope_events.sort(key=lambda x: (x['date'], 0 if x.get('item_type') == 'event' else 1))
         events_impact_by_scope[scope] = scope_events
 
     # Enrich customer_survey.csv rows using the exact same sentiment classification logic

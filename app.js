@@ -364,31 +364,44 @@
           ctx.restore();
         }
 
-        // Event markers
-        eventMarkers.forEach((ev, evIdx) => {
+        // Event & Promotion Campaign markers (grouped by monthIdx so badges stack cleanly without overlapping)
+        const markersByMonth = {};
+        eventMarkers.forEach((ev) => {
           if (ev.monthIdx >= 0 && ev.monthIdx < labels.length) {
-            const x = padding.left + ev.monthIdx * stepX;
-            ctx.save();
-            ctx.beginPath();
-            ctx.setLineDash([3, 3]);
-            ctx.strokeStyle = ev.color || '#B45309';
-            ctx.lineWidth = 1.5;
-            ctx.moveTo(x, padding.top - 6);
-            ctx.lineTo(x, padding.top + chartHeight);
-            ctx.stroke();
-            ctx.restore();
+            if (!markersByMonth[ev.monthIdx]) markersByMonth[ev.monthIdx] = [];
+            markersByMonth[ev.monthIdx].push(ev);
+          }
+        });
 
+        Object.entries(markersByMonth).forEach(([mIdxStr, mList]) => {
+          const mIdx = Number(mIdxStr);
+          const x = padding.left + mIdx * stepX;
+          const primaryColor = mList[0].color || '#B45309';
+
+          ctx.save();
+          ctx.beginPath();
+          ctx.setLineDash([3, 3]);
+          ctx.strokeStyle = primaryColor;
+          ctx.lineWidth = 1.5;
+          ctx.moveTo(x, padding.top - 4);
+          ctx.lineTo(x, padding.top + chartHeight);
+          ctx.stroke();
+          ctx.restore();
+
+          mList.slice(0, 3).forEach((ev, slotIdx) => {
+            ctx.font = '700 8.5px "Plus Jakarta Sans", sans-serif';
+            const bText = ev.badgeText || 'EV';
+            const bw = Math.max(48, Math.min(72, ctx.measureText(bText).width + 10));
+            const badgeY = padding.top - 16 - slotIdx * 13;
             ctx.fillStyle = ev.color || '#B45309';
             ctx.beginPath();
-            const badgeY = padding.top - 18 - (evIdx % 2) * 12;
-            ctx.roundRect ? ctx.roundRect(x - 30, badgeY, 60, 15, 3) : ctx.rect(x - 30, badgeY, 60, 15);
+            ctx.roundRect ? ctx.roundRect(x - bw / 2, badgeY, bw, 12, 3) : ctx.rect(x - bw / 2, badgeY, bw, 12);
             ctx.fill();
 
             ctx.fillStyle = '#FFFFFF';
-            ctx.font = '700 9px "Plus Jakarta Sans", sans-serif';
             ctx.textAlign = 'center';
-            ctx.fillText(ev.badgeText || `EV${evIdx + 1}`, x, badgeY + 10.5);
-          }
+            ctx.fillText(bText, x, badgeY + 9);
+          });
         });
 
         // Data lines & points
@@ -458,7 +471,11 @@
           });
           if (evs.length > 0) {
             evs.forEach(ev => {
-              html += `<div style="margin-top:4px;padding-top:4px;border-top:1px solid #E2E8F0;font-size:0.72rem;color:#B45309;font-weight:700;">⚡ Event: ${ev.eventName}</div>`;
+              const isPromo = ev.itemType === 'promotion';
+              const icon = isPromo ? '🏷️ Promo' : '⚡ Event';
+              const clr = isPromo ? '#0F766E' : '#B45309';
+              const extra = isPromo && ev.mechanic ? `<div style="font-size:0.68rem;color:#475569;font-weight:500;margin-top:1px;">${ev.mechanic} (${ev.stores || 'All'} · Spend: ${formatGBP(ev.spend || 0)})</div>` : '';
+              html += `<div style="margin-top:4px;padding-top:4px;border-top:1px solid #E2E8F0;font-size:0.72rem;color:${clr};font-weight:700;">${icon}: ${ev.eventName}${extra}</div>`;
             });
           }
           this.showTooltip(clientX, clientY, html);
@@ -2584,22 +2601,42 @@
         return rows.filter(r => r.month === m).reduce((acc, r) => acc + Number(r.store_profit_gbp || 0), 0);
       });
 
+      // Ensure promotions from promotions.csv are dynamically included even if not yet merged into events_impact_by_scope
+      const firstScopeList = (state.data.events_impact_by_scope && state.data.events_impact_by_scope['ALL']) || [];
+      if (state.data.promotions && state.data.promotions.length && !firstScopeList.some(e => e.item_type === 'promotion')) {
+        this.recalculateEventsImpact();
+      }
+
       const scopeEvents = (state.data.events_impact_by_scope && state.data.events_impact_by_scope[selectedStore])
         ? state.data.events_impact_by_scope[selectedStore]
         : (state.data.events_impact_by_scope ? state.data.events_impact_by_scope['ALL'] : []);
 
       const eventMarkers = scopeEvents.map((ev, i) => {
-        let badgeColor = '#B45309';
-        let badgeText = `EV${i + 1}`;
-        if (ev.event.includes('Trinity')) { badgeColor = '#4A2E2B'; badgeText = 'Trinity'; }
-        else if (ev.event.includes('Oat')) { badgeColor = '#15803D'; badgeText = 'Oat +40p'; }
-        else if (ev.event.includes('v3.0')) { badgeColor = '#B91C1C'; badgeText = 'App v3'; }
-        else if (ev.event.includes('Wage') || ev.event.includes('Dashly')) { badgeColor = '#78350F'; badgeText = 'Wage/Fee'; }
+        const isPromo = ev.item_type === 'promotion';
+        let badgeColor = isPromo ? '#0F766E' : '#B45309';
+        let badgeText = isPromo ? (ev.promo_id || `PR${i + 1}`) : `EV${i + 1}`;
+        if (!isPromo) {
+          if (ev.event.includes('Trinity')) { badgeColor = '#4A2E2B'; badgeText = 'Trinity'; }
+          else if (ev.event.includes('Oat')) { badgeColor = '#15803D'; badgeText = 'Oat +40p'; }
+          else if (ev.event.includes('v3.0')) { badgeColor = '#B91C1C'; badgeText = 'App v3'; }
+          else if (ev.event.includes('Wage') || ev.event.includes('Dashly')) { badgeColor = '#78350F'; badgeText = 'Wage/Fee'; }
+        } else {
+          if (ev.event.includes('BOGO')) badgeText = 'PR01 BOGO';
+          else if (ev.event.includes('Meal Deal')) badgeText = 'PR02 Meal';
+          else if (ev.event.includes('Festive')) badgeText = 'PR03 Xmas';
+          else if (ev.event.includes('Stamps')) badgeText = 'PR04 App2x';
+          else if (ev.event.includes('Student')) badgeText = 'PR05 Stud';
+          else if (ev.event.includes('Matcha')) badgeText = 'PR06 Matcha';
+        }
 
         return {
           monthIdx: ev.month_idx,
           label: ev.event,
           eventName: ev.event,
+          itemType: ev.item_type || 'event',
+          mechanic: ev.mechanic || '',
+          stores: ev.stores || '',
+          spend: ev.marketing_spend_gbp || 0,
           color: badgeColor,
           badgeText: badgeText
         };
@@ -2643,21 +2680,40 @@
       container.innerHTML = '';
 
       const scopeKey = selectedStore || 'ALL';
-      scopeBadge.textContent = scopeKey === 'ALL' ? 'Chain-Wide (All Stores)' : `Store ${scopeKey}`;
+      scopeBadge.textContent = scopeKey === 'ALL' ? '(Chain-Wide · All Stores)' : `(Store ${scopeKey})`;
 
       const eventsList = (state.data.events_impact_by_scope && state.data.events_impact_by_scope[scopeKey])
         ? state.data.events_impact_by_scope[scopeKey]
         : [];
 
       if (!eventsList.length) {
-        container.innerHTML = '<div style="color: var(--text-muted); font-size: 0.8rem;">No events data available for active scope.</div>';
+        container.innerHTML = '<div style="color: var(--text-muted); font-size: 0.8rem;">No events or promotions data available for active scope.</div>';
+        this.setupCollapsibleCards('eventTrackerCardsContainer', 3, 'events & promotions', '.event-tracker-card');
         return;
       }
 
       eventsList.forEach(ev => {
         const isUp = ev.delta_profit >= 0;
+        const isPromo = ev.item_type === 'promotion';
         const card = document.createElement('div');
         card.className = 'event-tracker-card';
+        if (isPromo) {
+          card.style.borderLeft = '3px solid #0F766E';
+        } else {
+          card.style.borderLeft = '3px solid var(--accent-primary)';
+        }
+
+        const dateLabel = isPromo && ev.end_date
+          ? `🏷️ ${ev.date} ➔ ${ev.end_date} | Shift: ${ev.pre_month} ➔ ${ev.post_month}`
+          : `📅 ${ev.date} | Month Shift: ${ev.pre_month} ➔ ${ev.post_month}`;
+
+        const promoMetaLine = isPromo
+          ? `<div style="display: flex; justify-content: space-between; font-size: 0.72rem; color: #0F766E; font-weight: 600; margin-top: 0.25rem;">
+               <span>Category: ${ev.category || 'All'} · Stores: ${ev.stores || 'All'}</span>
+               <span>Mktg Spend: ${formatGBP(ev.marketing_spend_gbp || 0)}</span>
+             </div>`
+          : '';
+
         card.innerHTML = `
           <div class="event-tracker-title">
             <span>${ev.event}</span>
@@ -2666,8 +2722,9 @@
             </span>
           </div>
           <div style="font-size: 0.725rem; color: var(--text-dim);">
-            📅 ${ev.date} | Month Shift: ${ev.pre_month} ➔ ${ev.post_month}
+            ${dateLabel}
           </div>
+          ${promoMetaLine}
           <div style="display: flex; justify-content: space-between; font-size: 0.775rem; margin-top: 0.35rem; background: var(--bg-secondary); padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border-color);">
             <span>Profit: <strong>${formatGBP(ev.pre_profit)}</strong> ➔ <strong>${formatGBP(ev.post_profit)}</strong></span>
             <span>Sales: <strong>${formatGBP(ev.pre_sales)}</strong> ➔ <strong>${formatGBP(ev.post_sales)}</strong></span>
@@ -2678,6 +2735,8 @@
         `;
         container.appendChild(card);
       });
+
+      this.setupCollapsibleCards('eventTrackerCardsContainer', 3, 'events & promotion campaigns', '.event-tracker-card');
     },
 
     renderStoreLeagueTable() {
@@ -3607,10 +3666,10 @@
       });
     },
 
-    setupCollapsibleCards(containerId, previewCount = 3, itemLabel = 'stores') {
+    setupCollapsibleCards(containerId, previewCount = 3, itemLabel = 'stores', cardSelector = '.sentiment-store-card') {
       const container = $(containerId);
       if (!container) return;
-      const allCards = Array.from(container.querySelectorAll('.sentiment-store-card'));
+      const allCards = Array.from(container.querySelectorAll(cardSelector));
       const footerId = `collapseFooter_${containerId}`;
       let footer = $(footerId);
 
@@ -4697,8 +4756,9 @@
         state.data.customer_reviews = rows;
         this.recalculateReviewSentiment(rows);
         state.activeDataset = filename;
-      } else if (schema === 'promotions.csv') {
+      } else if (schema === 'promotions.csv' || filename.toLowerCase().includes('promo')) {
         state.data.promotions = rows;
+        this.recalculateEventsImpact();
         state.activeDataset = 'promotions';
         if ($('selectDataset')) $('selectDataset').value = 'promotions';
       } else if (schema === 'capex.csv') {
@@ -4747,8 +4807,11 @@
 
     recalculateEventsImpact() {
       const events = state.data.events_raw || [];
+      const promotions = state.data.promotions || [];
       const pnl = state.data.pnl_fixed || [];
       const stores = state.data.stores || [];
+      const storeMap = {};
+      stores.forEach(s => { storeMap[s.store_id] = s; });
       const scopes = ['ALL'].concat(stores.map(s => s.store_id));
 
       const getMetrics = (scope) => {
@@ -4767,33 +4830,139 @@
       scopes.forEach(scope => {
         const metrics = getMetrics(scope);
         const list = [];
+
+        // 1. Major Business Events from business_events.csv
         events.forEach(ev => {
+          const evTitle = ev.event || ev.name || 'Business Event';
           const mStr = (ev.date || '').slice(0, 7);
           const idx = MONTH_LIST.indexOf(mStr);
-          const preM = idx > 0 ? MONTH_LIST[idx - 1] : mStr;
-          const postM = idx < MONTH_LIST.length - 1 ? MONTH_LIST[idx + 1] : mStr;
+          let preM = idx > 0 ? MONTH_LIST[idx - 1] : mStr;
+          let postM = idx < MONTH_LIST.length - 1 ? MONTH_LIST[idx + 1] : mStr;
+
+          if (evTitle.includes('Trinity')) { preM = '2025-08'; postM = '2025-10'; }
+          else if (evTitle.includes('Oat milk')) { preM = '2025-12'; postM = '2026-02'; }
+          else if (evTitle.includes('v3.0')) { preM = '2026-02'; postM = '2026-03'; }
+          else if (evTitle.includes('Wage') || evTitle.includes('v3.1') || evTitle.includes('Dashly')) { preM = '2026-03'; postM = '2026-04'; }
 
           const preProfit = (metrics[preM] || {}).profit || 0;
           const postProfit = (metrics[postM] || {}).profit || 0;
           const delta = postProfit - preProfit;
           const pct = preProfit !== 0 ? (delta / Math.abs(preProfit)) * 100 : 0;
 
+          let desc = ev.description || 'Operational business event';
+          if (scope === 'S03' && evTitle.includes('Trinity')) {
+            desc = 'Direct cannibalization: Leeds Trinity (S12) opened 0.4 miles away, shifting substantial customer traffic away from Briggate.';
+          } else if (scope === 'S12' && evTitle.includes('Trinity')) {
+            desc = 'Grand opening: Store S12 opened mid-September, establishing our second Leeds retail location.';
+          }
+
           list.push({
-            event: ev.event || ev.name,
+            item_type: 'event',
+            event: evTitle,
             date: ev.date,
             month: mStr,
             month_idx: idx,
             pre_month: preM,
             post_month: postM,
-            pre_profit: preProfit,
-            post_profit: postProfit,
-            delta_profit: delta,
+            pre_profit: Number(preProfit.toFixed(2)),
+            post_profit: Number(postProfit.toFixed(2)),
+            delta_profit: Number(delta.toFixed(2)),
             pct_profit: Number(pct.toFixed(1)),
-            pre_sales: (metrics[preM] || {}).sales || 0,
-            post_sales: (metrics[postM] || {}).sales || 0,
-            description: ev.description || 'Custom business event'
+            pre_sales: Number(((metrics[preM] || {}).sales || 0).toFixed(2)),
+            post_sales: Number(((metrics[postM] || {}).sales || 0).toFixed(2)),
+            description: desc
           });
         });
+
+        // 2. Promotion Campaigns from promotions.csv (with dynamically written description)
+        promotions.forEach(pr => {
+          const promoId = String(pr.promo_id || '').trim();
+          const promoName = String(pr.promo_name || 'Promotion Campaign').trim();
+          const mechanic = String(pr.mechanic || '').trim();
+          const startD = String(pr.start_date || '').trim();
+          const endD = String(pr.end_date || '').trim();
+          const storesStr = String(pr.stores || 'All').trim();
+          const catName = String(pr.category || 'All').trim();
+          const spendGbp = Number(pr.marketing_spend_gbp || 0);
+
+          const targetStores = storesStr.toLowerCase() === 'all'
+            ? ['ALL']
+            : storesStr.split(';').map(s => s.trim()).filter(Boolean);
+
+          if (scope !== 'ALL' && !targetStores.includes('ALL') && !targetStores.includes(scope)) {
+            return;
+          }
+
+          const startM = startD.slice(0, 7);
+          const endM = endD ? endD.slice(0, 7) : startM;
+          const idx = MONTH_LIST.indexOf(startM);
+          if (idx === -1) return;
+
+          const preM = idx > 0 ? MONTH_LIST[idx - 1] : startM;
+          const postM = metrics[startM] ? startM : (idx < MONTH_LIST.length - 1 ? MONTH_LIST[idx + 1] : startM);
+
+          let preProfit = 0, postProfit = 0, preSales = 0, postSales = 0;
+          if (scope === 'ALL' && !targetStores.includes('ALL')) {
+            const preRows = pnl.filter(r => r.month === preM && targetStores.includes(r.store_id));
+            const postRows = pnl.filter(r => r.month === postM && targetStores.includes(r.store_id));
+            preProfit = preRows.reduce((a, r) => a + Number(r.store_profit_gbp || 0), 0);
+            postProfit = postRows.reduce((a, r) => a + Number(r.store_profit_gbp || 0), 0);
+            preSales = preRows.reduce((a, r) => a + Number(r.total_sales_gbp || 0), 0);
+            postSales = postRows.reduce((a, r) => a + Number(r.total_sales_gbp || 0), 0);
+          } else {
+            preProfit = (metrics[preM] || {}).profit || 0;
+            postProfit = (metrics[postM] || {}).profit || 0;
+            preSales = (metrics[preM] || {}).sales || 0;
+            postSales = (metrics[postM] || {}).sales || 0;
+          }
+
+          const deltaProfit = postProfit - preProfit;
+          const pctProfit = preProfit !== 0 ? (deltaProfit / Math.abs(preProfit)) * 100 : 0;
+          const deltaSales = postSales - preSales;
+          const pctSales = preSales !== 0 ? (deltaSales / Math.abs(preSales)) * 100 : 0;
+
+          let scopeDesc = `all ${stores.length} chain stores`;
+          if (!targetStores.includes('ALL')) {
+            const named = targetStores.map(sid => storeMap[sid] ? `${sid} (${storeMap[sid].store_name})` : sid);
+            scopeDesc = `${targetStores.length} targeted store${targetStores.length > 1 ? 's' : ''} (${named.slice(0, 3).join(', ')}${named.length > 3 ? '...' : ''})`;
+          }
+
+          const roiRatio = spendGbp > 0 ? (deltaProfit / spendGbp) : 0;
+          const dynDesc = `Campaign ${promoId} (${catName}): ${mechanic}. Active ${startD} to ${endD} across ${scopeDesc} with ${formatGBP(spendGbp)} marketing spend (Sales shift: ${deltaSales >= 0 ? '+' : ''}${formatGBP(deltaSales)} [${pctSales >= 0 ? '+' : ''}${pctSales.toFixed(1)}%], Net profit vs spend: ${roiRatio >= 0 ? '+' : ''}${roiRatio.toFixed(2)}x).`;
+
+          list.push({
+            item_type: 'promotion',
+            promo_id: promoId,
+            event: `Promo: ${promoName} (${promoId})`,
+            date: startD,
+            end_date: endD,
+            month: startM,
+            end_month: endM,
+            month_idx: idx,
+            pre_month: preM,
+            post_month: postM,
+            pre_profit: Number(preProfit.toFixed(2)),
+            post_profit: Number(postProfit.toFixed(2)),
+            delta_profit: Number(deltaProfit.toFixed(2)),
+            pct_profit: Number(pctProfit.toFixed(1)),
+            pre_sales: Number(preSales.toFixed(2)),
+            post_sales: Number(postSales.toFixed(2)),
+            delta_sales: Number(deltaSales.toFixed(2)),
+            pct_sales: Number(pctSales.toFixed(1)),
+            stores: storesStr,
+            category: catName,
+            marketing_spend_gbp: spendGbp,
+            mechanic: mechanic,
+            description: dynDesc
+          });
+        });
+
+        list.sort((a, b) => {
+          const dCmp = String(a.date || '').localeCompare(String(b.date || ''));
+          if (dCmp !== 0) return dCmp;
+          return (a.item_type === 'event' ? 0 : 1) - (b.item_type === 'event' ? 0 : 1);
+        });
+
         impactByScope[scope] = list;
       });
 

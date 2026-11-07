@@ -29,7 +29,7 @@ The application audits and reconciles 18+ raw operational CSV datasets, quantifi
 The suite is designed with a **dual-mode execution architecture** so it runs seamlessly either via the local Python validation server (`launch_dashboard.py`) or directly as a zero-dependency standalone web application (`index.html` + `dashboard_data.js` + `app.js`):
 
 - **Automated Cross-Dataset Verification & Auto-Fix Engine (`validate_grind_crumb.py`):** Runs 29+ cross-table relational, arithmetic, chronological, and schema checks alongside per-column domain checks. Any anomalies detected in baseline or user-uploaded CSV files are automatically fixed/imputed and logged to the **Reconciliation & Errors** dashboard with their affected CSV files.
-- **Dynamic P&L & Event Impact Engine (`generate_advanced_insights.py` & `app.js`):** Tracks monthly revenue, store profit, margins, footfall conversion, and pre/post profit shifts around major business events (e.g., *Leeds Trinity S12 Opening*, *+40p Oat Milk Surcharge*, *App v3.0 Launch*, *April National Living Wage & Dashly 33% Commission Hike*).
+- **Dynamic P&L, Event & Promotion Campaign Impact Engine (`generate_advanced_insights.py` & `app.js`):** Tracks monthly revenue, store profit, margins, footfall conversion, and pre/post profit shifts around major business events (`business_events.csv`) and marketing promotion campaigns (`promotions.csv`, such as *PR01 Pastry BOGO*, *PR02 Lunch Meal Deal*, *PR03 Festive Menu*, *PR04 App Double Stamps*, *PR05 Student 20% Off*, and *PR06 Matcha Launch*).
 - **Unified Customer Review & Survey NLP Pipeline (`review_sentiment_pipeline.py`):** Processes both `customer_reviews.csv` (3,030 reviews) and `customer_survey.csv` (650 survey responses) using either the Google Gemini API (`gemini-2.5-flash`) or an offline rule-based domain NLP classifier to generate store-by-store ratings, NPS, sentiment scores (`-1.0` to `+1.0`), operational positives, and areas to improve.
 - **Huff Spatial Gravity Expansion Model:** Estimates monthly customer volume, average ticket spend, standalone P&L, and spatial cannibalization (`P_ij = (A_j / d_ij^λ) / Σ(A_k / d_ik^λ)`) for candidate sites (`CS1`–`CS7`) against existing stores (`S01`–`S12`).
 
@@ -52,7 +52,8 @@ The suite is designed with a **dual-mode execution architecture** so it runs sea
 │   ├── waste_log.csv                 # Daily food waste records
 │   ├── staff_rota_weekly.csv         # Weekly scheduled labour hours & wages
 │   ├── staff_monthly.csv             # Monthly headcount, starters & leavers
-│   └── business_events.csv           # Key operational & commercial events
+│   ├── business_events.csv           # Key operational & commercial events
+│   └── promotions.csv                # Marketing promotion campaigns (PR01–PR06)
 ├── index.html                        # Main dashboard UI & categorized navigation
 ├── style.css                         # Design system tokens, layout & responsive styles
 ├── app.js                            # Client-side analytics, interactive charts & validator
@@ -120,8 +121,11 @@ The application uses a **Categorized Primary Navigation Bar** paired with a **Qu
 - **Purpose:** High-level financial and operational monitoring across the 12-store estate from `2025-07` to `2026-06`.
 - **How to Use:**
   - Use the top filter bar to slice by **Store**, **City**, **Format** (`Flagship`, `Standard`, `Kiosk`), or **Month**.
-  - Hover over data points on the **Monthly Sales & Profit Trajectory** line chart to inspect exact monthly figures and event markers.
-  - Review the **Event Profit Impact Tracker** cards directly below the trajectory chart to see pre-event vs. post-event profit and sales shifts for the selected scope.
+  - Hover over data points on the **Monthly Sales & Profit Trajectory with Integrated Events & Promotion Campaigns** line chart to inspect exact monthly figures, operational events (`⚡ Event`), and active promotion campaigns (`🏷️ Promo`, including campaign mechanic, participating stores, and marketing spend).
+  - Review the **Business Events & Promotion Campaigns Impact Tracker** directly below the trajectory chart:
+    - Combines major operational events (`business_events.csv`) and marketing campaigns (`promotions.csv`) filtered dynamically for the selected store or chain-wide scope.
+    - Generates dynamic campaign descriptions from `promotions.csv` and active P&L metrics (detailing campaign category, offer mechanic, active date range, targeted stores, marketing spend, sales shift, and net profit vs. spend ratio).
+    - Defaults to a **3-card preview** and can be expanded or collapsed using the bottom toggle bar (`▼ Show All ... events & promotion campaigns` / `▲ Collapse to Preview`).
   - Hover over slices of the **Total Cost Breakdown** and **Sales Channel Revenue Contribution** donut charts for exact GBP values and percentage shares.
   - Click any column header in the **Store Performance League Table** to sort stores by Total Sales, Store Profit, Margin %, ★ Rating, Sentiment Score, Footfall, Conversion, or Avg Ticket.
 
