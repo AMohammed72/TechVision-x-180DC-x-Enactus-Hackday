@@ -171,16 +171,34 @@ def classify_text_rule_based(text: str, rating: Optional[float] = None) -> Dict[
     # 3. Key Issue / Praise Summary
     if "missing" in text_lower:
         summary = "Missing items in order"
-    elif "understaffed" in text_lower or "chaos" in text_lower:
-        summary = "Understaffed lunch rush"
-    elif "wait" in text_lower or "slow" in text_lower:
+    elif "understaffed" in text_lower or "chaos" in text_lower or "more staff at lunchtime" in text_lower or "queue is too long" in text_lower:
+        summary = "Understaffed lunch rush & long queues"
+    elif "wait" in text_lower or "slow" in text_lower or "faster service at lunch" in text_lower:
         summary = "Long service wait time"
-    elif "app" in text_lower and ("crash" in text_lower or "glitch" in text_lower or "checkout" in text_lower):
-        summary = "App checkout / rewards glitch"
+    elif "app" in text_lower and ("crash" in text_lower or "glitch" in text_lower or "checkout" in text_lower or "vanished" in text_lower or "bring back the old app" in text_lower):
+        summary = "App checkout crash & vanishing stamps"
+    elif "order ahead" in text_lower and "unreliable" in text_lower:
+        summary = "Unreliable mobile order-ahead experience"
     elif "soggy" in text_lower or "cold" in text_lower:
         summary = "Food temperature / condition"
-    elif "surcharge" in text_lower or "expensive" in text_lower:
-        summary = "Oat milk / delivery price perception"
+    elif "oat milk" in text_lower or "surcharge" in text_lower or "oat latte" in text_lower:
+        summary = "Oat milk surcharge driving churn"
+    elif "lower prices" in text_lower or "cheaper coffee" in text_lower or "expensive" in text_lower or "overpriced" in text_lower:
+        summary = "Price sensitivity & value perception"
+    elif "more seating" in text_lower or "somewhere to sit" in text_lower:
+        summary = "Insufficient seating during peak hours"
+    elif "tired and messy" in text_lower:
+        summary = "Store interior tired & needs refresh"
+    elif "loyalty rewards" in text_lower or "subscription" in text_lower:
+        summary = "Demand for loyalty rewards & coffee subscription"
+    elif "bring back the meal deal" in text_lower:
+        summary = "Customer demand to restore meal deal"
+    elif "keep the lunch meal deal" in text_lower or "great value" in text_lower:
+        summary = "High satisfaction with lunch meal deal value"
+    elif "keep doing what you're doing" in text_lower:
+        summary = "Consistent overall store execution"
+    elif "nothing, love it" in text_lower:
+        summary = "Strong customer loyalty & advocacy"
     elif "friendly" in text_lower or "lovely" in text_lower or "remember" in text_lower:
         summary = "Warm and friendly staff"
     elif "comfort food" in text_lower or "toastie" in text_lower:
@@ -201,6 +219,53 @@ def classify_text_rule_based(text: str, rating: Optional[float] = None) -> Dict[
         "key_issue_summary": summary
     }
 
+
+def classify_survey_row_rule_based(row: Union[pd.Series, Dict[str, Any]]) -> Dict[str, Any]:
+    """Classifies a customer survey response row using the exact same NLP sentiment logic."""
+    text = str(row.get("what_would_make_you_visit_more", "") or "")
+    nps_10 = float(row.get("likelihood_to_recommend_10", 6.0) or 6.0)
+    # Map 0-10 likelihood to 1-5 star equivalent scale so classify_text_rule_based uses identical thresholds
+    rating_5 = max(1.0, min(5.0, round(nps_10 / 2.0, 2)))
+    visits_vs = str(row.get("visits_vs_last_year", "") or "").strip()
+    visit_freq = str(row.get("visit_frequency", "") or "").strip()
+
+    base = classify_text_rule_based(text, rating=rating_5)
+
+    # Adjust sentiment score slightly based on visits_vs_last_year trajectory
+    score = float(base["sentiment_score"])
+    if visits_vs.lower() == "more":
+        score = min(1.0, round(score + 0.12, 3))
+    elif visits_vs.lower() == "less":
+        score = max(-1.0, round(score - 0.12, 3))
+
+    if nps_10 >= 8 or (score >= 0.25 and nps_10 >= 7):
+        sentiment = "positive"
+    elif nps_10 <= 5 or score <= -0.15:
+        sentiment = "negative"
+    else:
+        sentiment = "neutral"
+
+    summary = base["key_issue_summary"]
+    if summary == "General customer feedback":
+        if sentiment == "positive":
+            if visits_vs.lower() == "more":
+                summary = "Increased visit frequency vs last year"
+            elif visit_freq.lower() in ("daily", "2-3x week"):
+                summary = "High repeat daily/weekly visit loyalty"
+            else:
+                summary = "Strong customer loyalty & advocacy"
+        elif sentiment == "negative":
+            summary = "Declining visit frequency & churn risk"
+
+    return {
+        "sentiment": sentiment,
+        "sentiment_score": score,
+        "rating": rating_5,
+        "nps_10": nps_10,
+        "category": base["category"],
+        "key_issue_summary": summary
+    }
+
 # ==============================================================================
 # PIPELINE EXECUTION
 # ==============================================================================
@@ -211,7 +276,7 @@ def normalize_store_id(row: pd.Series) -> str:
         if val != "" and val.lower() != "nan":
             return val
 
-    for col in ["store_name_raw", "store_name", "store"]:
+    for col in ["store_name_raw", "store_name", "store", "home_store"]:
         if col in row and pd.notna(row[col]):
             clean_str = str(row[col]).strip().lower()
             if clean_str in STORE_NAME_TO_ID:

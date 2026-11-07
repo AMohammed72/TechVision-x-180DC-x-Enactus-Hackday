@@ -938,9 +938,8 @@ class DatasetValidator:
         self.results = []
         self.reconciled_discrepancies = []
 
-        for ref_file in ["stores.csv", "products.csv", "footfall.csv", "daily_store_sales.csv", "starter_store_monthly_pnl.csv"]:
-            if ref_file not in self.dfs:
-                self.load_table(ref_file)
+        # Load all baseline dataset tables so the full validation suite runs across every file
+        self.load_all_tables()
 
         cleaned_df = df.copy()
         schema_type = detect_schema_type(filename, list(cleaned_df.columns))
@@ -1139,12 +1138,26 @@ class DatasetValidator:
 
         self.dfs[schema_type] = cleaned_df
 
-        if schema_type == "starter_store_monthly_pnl.csv":
-            self.check_aggregations()
-        elif schema_type in ("transactions.csv", "transaction_lines.csv"):
-            self.check_arithmetic_and_pricing()
-        elif schema_type in ("candidate_sites.csv", "store_catchment.csv"):
-            self.check_expansion_and_catchment()
+        # Run the complete cross-dataset validation suite across all files so every check is executed
+        self.check_file_hygiene_and_encodings()
+        other_files = [f for f in self.dfs.keys() if f != schema_type]
+        self.check_schemas_and_columns(target_files=other_files)
+        self.check_keys_and_duplicates()
+        self.check_referential_integrity()
+        self.check_arithmetic_and_pricing()
+        self.check_dates_and_calendar()
+        self.check_aggregations()
+        self.check_expansion_and_catchment()
+
+        # Deduplicate test_ids while keeping the first (most specific) record
+        deduped_results = []
+        seen_ids = set()
+        for r in self.results:
+            tid = r.get("test_id")
+            if tid not in seen_ids:
+                seen_ids.add(tid)
+                deduped_results.append(r)
+        self.results = deduped_results
 
         end_time = datetime.now(timezone.utc)
         duration_ms = round((end_time - start_time).total_seconds() * 1000, 2)

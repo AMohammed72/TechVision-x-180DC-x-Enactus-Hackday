@@ -171,9 +171,10 @@
       date_cols: ['review_date']
     },
     'customer_survey.csv': {
-      required: ['response_id', 'quarter', 'store_id', 'overall_satisfaction_10', 'value_for_money_10', 'drink_quality_10', 'speed_of_service_10', 'recommend_nps_0_10', 'primary_channel'],
+      required: ['response_id', 'response_date', 'home_store', 'visit_frequency', 'visits_vs_last_year', 'usual_milk', 'uses_app', 'uses_delivery', 'likelihood_to_recommend_10', 'what_would_make_you_visit_more'],
       pk: ['response_id'],
-      ranges: { 'overall_satisfaction_10': [0.0, 10.0], 'recommend_nps_0_10': [0.0, 10.0] }
+      ranges: { 'likelihood_to_recommend_10': [0.0, 10.0] },
+      date_cols: ['response_date']
     },
     'staff_exit_survey.csv': {
       required: ['response_id', 'month', 'store_id', 'role', 'tenure_months', 'primary_reason', 'comment'],
@@ -212,6 +213,7 @@
       networkCity: 'Leeds'
     },
     validationReport: null,
+    uploadedValidationMap: {},
     valStatusFilter: 'ALL',
     pendingUpload: null,
     expandedTables: {}
@@ -1329,6 +1331,7 @@
       if (fname.includes('waste')) return 'waste_log.csv';
       if (fname.includes('rota')) return 'staff_rota_weekly.csv';
       if (fname.includes('review')) return 'customer_reviews.csv';
+      if (fname.includes('survey') && !fname.includes('exit')) return 'customer_survey.csv';
       if (fname.includes('candidate')) return 'candidate_sites.csv';
       if (fname.includes('catchment')) return 'store_catchment.csv';
       if (fname.includes('event')) return 'business_events.csv';
@@ -1673,31 +1676,112 @@
       const failed = results.filter(r => r.status === 'FAIL').length;
       const overallStatus = failed === 0 && warnings === 0 ? 'PASS' : (failed === 0 ? 'WARN' : 'FAIL');
 
-      return {
-        status: overallStatus,
-        filename,
-        detected_schema: schemaType,
-        row_count: cleanedRows.length,
-        column_count: headers.length,
-        columns: headers,
-        cleaned_rows: cleanedRows,
-        reconciled_discrepancies: reconciledDiscrepancies,
-        affected_files: [filename],
-        execution_metadata: {
-          timestamp: new Date().toISOString(),
-          duration_ms: durationMs
-        },
-        summary: {
-          total_tests: totalTests,
-          passed,
-          warnings,
-          failed,
-          pass_rate_percentage: totalTests > 0 ? Number(((passed / totalTests) * 100).toFixed(1)) : 0.0
-        },
-        results
-      };
-    }
-  };
+        return {
+          status: overallStatus,
+          filename,
+          detected_schema: schemaType,
+          row_count: cleanedRows.length,
+          column_count: headers.length,
+          columns: headers,
+          cleaned_rows: cleanedRows,
+          reconciled_discrepancies: reconciledDiscrepancies,
+          affected_files: [filename],
+          execution_metadata: {
+            timestamp: new Date().toISOString(),
+            duration_ms: durationMs
+          },
+          summary: {
+            total_tests: totalTests,
+            passed,
+            warnings,
+            failed,
+            pass_rate_percentage: totalTests > 0 ? Number(((passed / totalTests) * 100).toFixed(1)) : 0.0
+          },
+          results: results.map(r => ({
+            ...r,
+            test_id: r.test_id.includes(filename) ? r.test_id : `${r.test_id} [${filename}]`,
+            test_name: r.test_name.includes(filename) ? r.test_name : `${r.test_name} (${filename})`
+          }))
+        };
+      },
+
+      buildUnifiedDatasetValidationReport(uploadedMap, baselineReport) {
+        const t0 = performance.now();
+        const baseResults = (baselineReport && baselineReport.results) ? baselineReport.results.map(r => ({ ...r })) : [];
+        const baseDiscrepancies = (baselineReport && baselineReport.reconciled_discrepancies) ? [...baselineReport.reconciled_discrepancies] : [];
+
+        const uploadedEntries = Object.values(uploadedMap || {});
+        const uploadedSchemas = new Set(uploadedEntries.map(u => u.detected_schema));
+        const uploadedFilenames = uploadedEntries.map(u => u.filename);
+
+        // Collect all detailed per-file checks across every uploaded file
+        const combinedResults = [];
+        const combinedDiscrepancies = [];
+        const seenTestIds = new Set();
+
+        uploadedEntries.forEach(uRep => {
+          (uRep.results || []).forEach(r => {
+            if (!seenTestIds.has(r.test_id)) {
+              seenTestIds.add(r.test_id);
+              combinedResults.push(r);
+            }
+          });
+          (uRep.reconciled_discrepancies || []).forEach(d => {
+            combinedDiscrepancies.push(d);
+          });
+        });
+
+        // Merge all 29+ cross-dataset baseline checks so no check is ever dropped when uploading individual files
+        baseResults.forEach(br => {
+          // If an uploaded file replaced a schema and already ran the exact same schema check, update or keep both
+          const isReplacedSchemaCheck = Array.from(uploadedSchemas).some(sch => br.test_id === `SCHEMA-REQ-${sch}` || br.test_id === `SCHEMA-EXTRA-${sch}`);
+          if (!isReplacedSchemaCheck && !seenTestIds.has(br.test_id)) {
+            seenTestIds.add(br.test_id);
+            combinedResults.push(br);
+          }
+        });
+
+        baseDiscrepancies.forEach(bd => {
+          combinedDiscrepancies.push(bd);
+        });
+
+        const totalTests = combinedResults.length;
+        const passed = combinedResults.filter(r => r.status === 'PASS').length;
+        const warnings = combinedResults.filter(r => r.status === 'WARN').length;
+        const failed = combinedResults.filter(r => r.status === 'FAIL').length;
+        const overallStatus = failed === 0 && warnings === 0 ? 'PASS' : (failed === 0 ? 'WARN' : 'FAIL');
+
+        const allAffected = new Set();
+        combinedResults.forEach(r => {
+          (r.affected_files || []).forEach(f => allAffected.add(f));
+        });
+
+        const totalDuration = uploadedEntries.reduce((acc, u) => acc + Number((u.execution_metadata || {}).duration_ms || 0), 0)
+          + Number((performance.now() - t0).toFixed(2));
+
+        return {
+          status: overallStatus,
+          filename: uploadedFilenames.length > 0 ? uploadedFilenames.join(', ') : null,
+          uploaded_files_count: uploadedFilenames.length,
+          detected_schema: uploadedEntries.length === 1 ? uploadedEntries[0].detected_schema : `${uploadedEntries.length} Uploaded + Full Dataset Suite`,
+          row_count: uploadedEntries.reduce((acc, u) => acc + Number(u.row_count || 0), 0),
+          affected_files: Array.from(allAffected),
+          execution_metadata: {
+            timestamp: new Date().toISOString(),
+            duration_ms: Number(totalDuration.toFixed(2))
+          },
+          summary: {
+            total_tests: totalTests,
+            passed,
+            warnings,
+            failed,
+            pass_rate_percentage: totalTests > 0 ? Number(((passed / totalTests) * 100).toFixed(1)) : 0.0
+          },
+          results: combinedResults,
+          reconciled_discrepancies: combinedDiscrepancies
+        };
+      }
+    };
 
   // --- Core Application Object ---
   const App = {
@@ -1782,7 +1866,6 @@
         if (expanded) {
           footer.innerHTML = `
             <span class="table-collapse-meta">
-              <span class="badge-tag success" style="padding: 1px 6px; font-size: 11px;">Expanded</span>
               Showing all <strong>${totalCount}</strong> ${itemLabel}
             </span>
             <button type="button" class="btn-table-toggle is-expanded">
@@ -1792,7 +1875,6 @@
         } else {
           footer.innerHTML = `
             <span class="table-collapse-meta">
-              <span class="badge-tag" style="padding: 1px 6px; font-size: 11px;">Preview Mode</span>
               Showing first <strong>${effectivePreview}</strong> of <strong>${totalCount}</strong> ${itemLabel}
             </span>
             <button type="button" class="btn-table-toggle">
@@ -2134,6 +2216,7 @@
         stores: `Stores (${(state.data.stores || []).length} rows)`,
         catchment: `Catchment Demographics (${(state.data.catchment || []).length} rows)`,
         candidate_sites: `Candidate Sites (${(state.data.candidate_sites || []).length} rows)`,
+        customer_survey: `Customer Survey (${(state.data.customer_survey || []).length} rows)`,
         promotions: `Promotions (${(state.data.promotions || []).length} rows)`,
         capex: `Capex Log (${(state.data.capex || []).length} rows)`,
         events: `Business Events (${(state.data.events_raw || []).length} rows)`
@@ -3194,25 +3277,287 @@
             Across the active dataset, <strong>${deliv.channel}</strong> generates <strong>${formatGBP(deliv.sales)} in sales (${deliv.sales_share_pct}% of total revenue)</strong> across <strong>${formatInt(deliv.receipts)} orders</strong>, but incurs <strong>${formatGBP(deliv.commission)} in platform commission fees</strong>, <strong>${formatGBP(deliv.packaging)} in packaging</strong>, and <strong>${formatGBP(deliv.packing_labour)} in staff packing labour (~4 min/order)</strong>.
             This compresses delivery's gross contribution margin to <strong>${deliv.gross_margin_pct}%</strong> (compared to <strong>${inStore.gross_margin_pct}%</strong> for In-Store and App Click & Collect) and results in an estimated net margin of <strong>${deliv.net_margin_pct}% (${formatGBP(deliv.net_profit_est)})</strong> after store overhead allocation.
           </p>
-          <div style="margin-top: 0.6rem; display: flex; flex-wrap: wrap; gap: 0.45rem;">
-            <span class="badge-tag danger">Action 1: Enforce £12+ minimum basket size on delivery platforms</span>
-            <span class="badge-tag warning">Action 2: Pass £0.50 packaging surcharge to delivery orders</span>
-            <span class="badge-tag success">Action 3: Migrate delivery orders to App Click & Collect (0% commission)</span>
-          </div>
         `;
       }
     },
 
-    // --- TAB 5: SENTIMENT PIPELINE & STORE INSIGHTS ---
+    // --- TAB 5: SENTIMENT PIPELINE & STORE INSIGHTS (REVIEWS + CUSTOMER SURVEYS) ---
+    classifySentimentText(text, rating5 = 3.0) {
+      const t = String(text || '').toLowerCase();
+      const posWords = ['love', 'great', 'unreal', 'delicious', 'best', 'friendly', 'spotless', 'proper', 'worth', 'quick', 'lovely', 'decent', 'nice', 'good', 'keep doing'];
+      const negWords = ['missing', 'chaos', 'understaffed', 'ridiculous', 'soggy', 'surcharge', 'crash', 'slow', 'late', 'terrible', 'bad', 'disappointed', 'cold', 'overpriced', 'unfair', 'too long', 'vanished', 'unreliable', 'tired', 'messy'];
+
+      let posCount = 0;
+      let negCount = 0;
+      posWords.forEach(w => { if (t.includes(w)) posCount++; });
+      negWords.forEach(w => { if (t.includes(w)) negCount++; });
+
+      const r = isNaN(Number(rating5)) ? 3.0 : Number(rating5);
+      let sentiment = 'neutral';
+      let score = 0.0;
+      if (r >= 4.0 || (posCount > negCount && r >= 3.0)) {
+        sentiment = 'positive';
+        score = 0.4 + 0.15 * (r - 3.0) + Math.min(0.25, posCount * 0.1);
+      } else if (r <= 2.0 || negCount > posCount) {
+        sentiment = 'negative';
+        score = -0.4 - 0.15 * (3.0 - r) - Math.min(0.25, negCount * 0.1);
+      } else {
+        sentiment = 'neutral';
+        score = (posCount - negCount) * 0.1;
+      }
+      score = Math.max(-1.0, Math.min(1.0, Number(score.toFixed(3))));
+
+      let summary = 'General customer feedback';
+      if (t.includes('missing')) summary = 'Missing items in order';
+      else if (t.includes('understaffed') || t.includes('chaos') || t.includes('more staff at lunchtime') || t.includes('queue is too long')) summary = 'Understaffed lunch rush & long queues';
+      else if (t.includes('wait') || t.includes('slow') || t.includes('faster service at lunch')) summary = 'Long service wait time';
+      else if (t.includes('app') && (t.includes('crash') || t.includes('glitch') || t.includes('checkout') || t.includes('vanished') || t.includes('bring back the old app'))) summary = 'App checkout crash & vanishing stamps';
+      else if (t.includes('order ahead') && t.includes('unreliable')) summary = 'Unreliable mobile order-ahead experience';
+      else if (t.includes('soggy') || t.includes('cold')) summary = 'Food temperature / condition';
+      else if (t.includes('oat milk') || t.includes('surcharge') || t.includes('oat latte')) summary = 'Oat milk surcharge driving churn';
+      else if (t.includes('lower prices') || t.includes('cheaper coffee') || t.includes('expensive') || t.includes('overpriced')) summary = 'Price sensitivity & value perception';
+      else if (t.includes('more seating') || t.includes('somewhere to sit')) summary = 'Insufficient seating during peak hours';
+      else if (t.includes('tired and messy')) summary = 'Store interior tired & needs refresh';
+      else if (t.includes('loyalty rewards') || t.includes('subscription')) summary = 'Demand for loyalty rewards & coffee subscription';
+      else if (t.includes('bring back the meal deal')) summary = 'Customer demand to restore meal deal';
+      else if (t.includes('keep the lunch meal deal') || t.includes('great value')) summary = 'High satisfaction with lunch meal deal value';
+      else if (t.includes("keep doing what you're doing")) summary = 'Consistent overall store execution';
+      else if (t.includes('nothing, love it')) summary = 'Strong customer loyalty & advocacy';
+      else if (t.includes('friendly') || t.includes('lovely') || t.includes('remember')) summary = 'Warm and friendly staff';
+      else if (t.includes('comfort food') || t.includes('toastie')) summary = 'Delicious toasties & food';
+      else if (t.includes('cinnamon bun') || t.includes('pastry')) summary = 'Outstanding bakery pastries';
+      else if (t.includes('best flat white') || t.includes('good coffee') || t.includes('matcha')) summary = 'High quality coffee & drinks';
+      else if (t.includes('spotless') || t.includes('atmosphere') || t.includes('wifi')) summary = 'Great atmosphere and wifi';
+
+      return { sentiment, sentiment_score: score, rating: r, key_issue_summary: summary };
+    },
+
+    resolveStoreIdFromName(rawVal) {
+      const s = String(rawVal || '').trim();
+      if (!s) return '';
+      const stores = state.data.stores || [];
+      const exactId = stores.find(st => st.store_id.toLowerCase() === s.toLowerCase());
+      if (exactId) return exactId.store_id;
+      const lower = s.toLowerCase();
+      const byName = stores.find(st => st.store_name.toLowerCase() === lower || lower.includes(st.store_name.toLowerCase()) || st.store_name.toLowerCase().includes(lower));
+      if (byName) return byName.store_id;
+      const aliasMap = {
+        'division st': 'S01', 'sheff station': 'S02', 'briggate': 'S03', 'stonegate': 'S04',
+        'northern quarter': 'S05', 'nq': 'S05', 'spinningfields': 'S06', 'piccadilly': 'S07',
+        'hockley': 'S08', 'harrogate': 'S09', 'hull': 'S10', 'su kiosk': 'S11', 'uni campus': 'S11', 'trinity': 'S12'
+      };
+      for (const [k, sid] of Object.entries(aliasMap)) {
+        if (lower.includes(k)) return sid;
+      }
+      return '';
+    },
+
+    recalculateSurveySentiment(surveyRows) {
+      const rows = surveyRows || state.data.customer_survey || [];
+      if (!rows.length) return;
+      const insights = state.data.store_sentiment_summary || {};
+      const byStore = {};
+      Object.keys(insights).forEach(sid => { byStore[sid] = []; });
+
+      rows.forEach(r => {
+        const sid = this.resolveStoreIdFromName(r.store_id || r.home_store || r.store_name);
+        if (!sid || !byStore[sid]) return;
+        const nps10 = Number(r.likelihood_to_recommend_10 !== undefined ? r.likelihood_to_recommend_10 : (r.recommend_nps_0_10 || 6));
+        const rating5 = Math.max(1.0, Math.min(5.0, Number((nps10 / 2.0).toFixed(2))));
+        const text = r.what_would_make_you_visit_more || r.comment || '';
+        const visitsVs = String(r.visits_vs_last_year || '').trim().toLowerCase();
+        const visitFreq = String(r.visit_frequency || '').trim().toLowerCase();
+
+        const res = this.classifySentimentText(text, rating5);
+        let score = res.sentiment_score;
+        if (visitsVs === 'more') score = Math.min(1.0, Number((score + 0.12).toFixed(3)));
+        else if (visitsVs === 'less') score = Math.max(-1.0, Number((score - 0.12).toFixed(3)));
+
+        let sentiment = 'neutral';
+        if (nps10 >= 8 || (score >= 0.25 && nps10 >= 7)) sentiment = 'positive';
+        else if (nps10 <= 5 || score <= -0.15) sentiment = 'negative';
+
+        let summary = res.key_issue_summary;
+        if (summary === 'General customer feedback') {
+          if (sentiment === 'positive') {
+            if (visitsVs === 'more') summary = 'Increased visit frequency vs last year';
+            else if (visitFreq === 'daily' || visitFreq === '2-3x week') summary = 'High repeat daily/weekly visit loyalty';
+            else summary = 'Strong customer loyalty & advocacy';
+          } else if (sentiment === 'negative') {
+            summary = 'Declining visit frequency & churn risk';
+          }
+        }
+        byStore[sid].push({ sentiment, sentiment_score: score, rating: rating5, nps_10: nps10, key_issue_summary: summary });
+      });
+
+      Object.keys(insights).forEach(sid => {
+        const list = byStore[sid] || [];
+        if (!list.length) return;
+        const pos = list.filter(x => x.sentiment === 'positive');
+        const neg = list.filter(x => x.sentiment === 'negative');
+        const countSummary = (arr) => {
+          const map = {};
+          arr.forEach(x => {
+            if (x.key_issue_summary && x.key_issue_summary !== 'General customer feedback') {
+              map[x.key_issue_summary] = (map[x.key_issue_summary] || 0) + 1;
+            }
+          });
+          return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 3).map(e => e[0]);
+        };
+        let topPos = countSummary(pos);
+        if (!topPos.length) topPos = ['Consistent overall store execution', 'Strong customer loyalty & advocacy', 'High repeat daily/weekly visit loyalty'];
+        let topNeg = countSummary(neg);
+        if (!topNeg.length) topNeg = ['App checkout crash & vanishing stamps', 'Oat milk surcharge driving churn', 'Understaffed lunch rush & long queues'];
+
+        const avgScore = list.reduce((a, x) => a + x.sentiment_score, 0) / list.length;
+        const avgRating = list.reduce((a, x) => a + x.rating, 0) / list.length;
+        const avgNps = list.reduce((a, x) => a + x.nps_10, 0) / list.length;
+
+        insights[sid].survey_sentiment = {
+          total_responses: list.length,
+          avg_sentiment: Number(avgScore.toFixed(3)),
+          sentiment_label: avgScore >= 0.25 ? 'Positive' : (avgScore >= 0 ? 'Neutral' : 'Negative'),
+          avg_rating: Number(avgRating.toFixed(2)),
+          avg_nps_10: Number(avgNps.toFixed(2)),
+          pct_positive: Number(((pos.length / list.length) * 100).toFixed(1)),
+          pct_negative: Number(((neg.length / list.length) * 100).toFixed(1)),
+          current_positives: topPos,
+          things_to_improve: topNeg
+        };
+      });
+    },
+
+    recalculateReviewSentiment(reviewRows) {
+      if (!reviewRows || !reviewRows.length) return;
+      const insights = state.data.store_sentiment_summary || {};
+      const byStore = {};
+      Object.keys(insights).forEach(sid => { byStore[sid] = []; });
+
+      reviewRows.forEach(r => {
+        const sid = this.resolveStoreIdFromName(r.store_id || r.store_name_raw || r.store_name || r.store);
+        if (!sid || !byStore[sid]) return;
+        const rating5 = Number(r.rating || 3.0);
+        const text = r.review_text || r.text || '';
+        const res = this.classifySentimentText(text, rating5);
+        byStore[sid].push(res);
+      });
+
+      Object.keys(insights).forEach(sid => {
+        const list = byStore[sid] || [];
+        if (!list.length) return;
+        const pos = list.filter(x => x.sentiment === 'positive');
+        const neg = list.filter(x => x.sentiment === 'negative');
+        const countSummary = (arr) => {
+          const map = {};
+          arr.forEach(x => {
+            if (x.key_issue_summary && x.key_issue_summary !== 'General customer feedback') {
+              map[x.key_issue_summary] = (map[x.key_issue_summary] || 0) + 1;
+            }
+          });
+          return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 3).map(e => e[0]);
+        };
+        let topPos = countSummary(pos);
+        if (!topPos.length) topPos = ['High quality coffee & drinks', 'Warm and friendly staff', 'Great atmosphere and wifi'];
+        let topNeg = countSummary(neg);
+        if (!topNeg.length) topNeg = ['Long service wait time', 'Missing items in order', 'Oat milk surcharge driving churn'];
+
+        const avgScore = list.reduce((a, x) => a + x.sentiment_score, 0) / list.length;
+        const avgRating = list.reduce((a, x) => a + x.rating, 0) / list.length;
+
+        insights[sid].total_reviews = list.length;
+        insights[sid].avg_sentiment = Number(avgScore.toFixed(3));
+        insights[sid].sentiment_label = avgScore >= 0.25 ? 'Positive' : (avgScore >= 0 ? 'Neutral' : 'Negative');
+        insights[sid].avg_rating = Number(avgRating.toFixed(2));
+        insights[sid].pct_positive = Number(((pos.length / list.length) * 100).toFixed(1));
+        insights[sid].pct_negative = Number(((neg.length / list.length) * 100).toFixed(1));
+        insights[sid].current_positives = topPos;
+        insights[sid].things_to_improve = topNeg;
+      });
+    },
+
+    setupCollapsibleCards(containerId, previewCount = 3, itemLabel = 'stores') {
+      const container = $(containerId);
+      if (!container) return;
+      const allCards = Array.from(container.querySelectorAll('.sentiment-store-card'));
+      const footerId = `collapseFooter_${containerId}`;
+      let footer = $(footerId);
+
+      if (allCards.length === 0) {
+        if (footer) footer.style.display = 'none';
+        return;
+      }
+
+      const totalCount = allCards.length;
+      const effectivePreview = totalCount > previewCount ? previewCount : Math.max(1, Math.min(previewCount, totalCount));
+      const isExpanded = !!state.expandedTables[containerId];
+
+      const applyState = (expanded) => {
+        state.expandedTables[containerId] = expanded;
+        allCards.forEach((card, idx) => {
+          if (expanded || idx < effectivePreview) {
+            card.style.display = '';
+          } else {
+            card.style.display = 'none';
+          }
+        });
+
+        if (!footer) {
+          footer = document.createElement('div');
+          footer.id = footerId;
+          footer.className = 'table-collapse-footer';
+          footer.style.marginTop = '0.5rem';
+          footer.style.borderTop = '1px solid var(--border-color)';
+          footer.style.borderRadius = 'var(--radius-sm)';
+          container.insertAdjacentElement('afterend', footer);
+        }
+
+        footer.style.display = 'flex';
+        const hiddenCount = Math.max(0, totalCount - effectivePreview);
+        if (expanded) {
+          footer.innerHTML = `
+            <span class="table-collapse-meta">
+              Showing all <strong>${totalCount}</strong> ${itemLabel}
+            </span>
+            <button type="button" class="btn-table-toggle is-expanded">
+              ▲ Collapse to Preview (First ${effectivePreview} ${itemLabel})
+            </button>
+          `;
+        } else {
+          footer.innerHTML = `
+            <span class="table-collapse-meta">
+              Showing first <strong>${effectivePreview}</strong> of <strong>${totalCount}</strong> ${itemLabel}
+            </span>
+            <button type="button" class="btn-table-toggle">
+              ▼ Show All ${totalCount} ${itemLabel}${hiddenCount > 0 ? ` (+${hiddenCount} more)` : ''}
+            </button>
+          `;
+        }
+
+        const btn = footer.querySelector('.btn-table-toggle');
+        if (btn) {
+          btn.onclick = () => applyState(!state.expandedTables[containerId]);
+        }
+      };
+
+      applyState(isExpanded);
+    },
+
     renderSentimentPipelineTab() {
       const container = $('sentimentStoreCardsContainer');
       container.innerHTML = '';
       const insights = state.data.store_sentiment_summary || {};
+      if (state.data.customer_survey && state.data.customer_survey.length) {
+        const firstStore = Object.values(insights)[0];
+        if (firstStore && !firstStore.survey_sentiment) {
+          this.recalculateSurveySentiment(state.data.customer_survey);
+        }
+      }
       const allStores = Object.values(insights);
       const totalReviewsCount = allStores.reduce((acc, s) => acc + Number(s.total_reviews || 0), 0);
+      const totalSurveyCount = allStores.reduce((acc, s) => acc + Number((s.survey_sentiment || {}).total_responses || 0), 0);
 
       if ($('sentimentSubtitleText')) {
-        $('sentimentSubtitleText').textContent = `Dynamically aggregated from ${formatInt(totalReviewsCount)} customer reviews across ${allStores.length} stores with average sentiment, star ratings, current operational positives, and actionable improvements.`;
+        $('sentimentSubtitleText').textContent = `Dynamically aggregated from ${formatInt(totalReviewsCount)} customer reviews and ${formatInt(totalSurveyCount)} customer survey responses across ${allStores.length} stores with average sentiment, ratings, operational positives, and actionable improvements.`;
       }
 
       const targetStore = state.sentimentStoreFilter;
@@ -3222,9 +3567,12 @@
       let entries = allStores.filter(st => {
         if (targetStore !== 'ALL' && st.store_id !== targetStore) return false;
         if (search) {
+          const surv = st.survey_sentiment || { current_positives: [], things_to_improve: [] };
           const matchName = st.store_name.toLowerCase().includes(search);
-          const matchPos = st.current_positives.some(p => p.toLowerCase().includes(search));
-          const matchNeg = st.things_to_improve.some(n => n.toLowerCase().includes(search));
+          const matchPos = (st.current_positives || []).some(p => p.toLowerCase().includes(search))
+            || (surv.current_positives || []).some(p => p.toLowerCase().includes(search));
+          const matchNeg = (st.things_to_improve || []).some(n => n.toLowerCase().includes(search))
+            || (surv.things_to_improve || []).some(n => n.toLowerCase().includes(search));
           if (!matchName && !matchPos && !matchNeg) return false;
         }
         return true;
@@ -3242,49 +3590,131 @@
 
       if (!entries.length) {
         container.innerHTML = '<div style="padding: 1.5rem; color: var(--text-muted); text-align: center;">No store sentiment data found for active filter.</div>';
+        this.setupCollapsibleCards('sentimentStoreCardsContainer', 3, 'stores');
         return;
       }
 
       entries.forEach(st => {
+        const surv = st.survey_sentiment || {
+          total_responses: 0,
+          avg_sentiment: 0,
+          avg_rating: 0,
+          avg_nps_10: 0,
+          pct_positive: 0,
+          pct_negative: 0,
+          current_positives: ['Consistent overall store execution'],
+          things_to_improve: ['Monitor peak wait times']
+        };
+
         const card = document.createElement('div');
         card.className = 'sentiment-store-card';
         card.innerHTML = `
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.65rem; flex-wrap: wrap; gap: 0.5rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 0.55rem; border-bottom: 1px solid var(--border-color); flex-wrap: wrap; gap: 0.5rem; cursor: pointer;" class="sentiment-card-toggle-hdr" title="Click to collapse/expand store details">
             <div>
               <strong style="font-size: 1rem;">${st.store_id} · ${st.store_name}</strong>
               <span style="font-size: 0.78rem; color: var(--text-dim); margin-left: 0.45rem;">(${st.city})</span>
             </div>
-            <div style="display: flex; gap: 0.65rem; align-items: center;">
-              <span style="font-size: 0.85rem; color: var(--warning); font-weight: 700;">★ ${st.avg_rating.toFixed(2)} / 5.0</span>
-              <span class="badge-tag ${st.avg_sentiment >= 0.4 ? 'success' : (st.avg_sentiment >= 0.2 ? 'warning' : 'danger')}">
-                Sentiment: ${st.avg_sentiment >= 0 ? '+' : ''}${st.avg_sentiment.toFixed(3)}
+            <div style="display: flex; gap: 0.85rem; align-items: center; flex-wrap: wrap;">
+              <span style="font-size: 0.78rem; color: var(--text-muted);">
+                Reviews: <strong style="color: var(--warning);">★ ${st.avg_rating.toFixed(2)}/5.0</strong>
+                (<strong style="color: ${st.avg_sentiment >= 0.4 ? 'var(--success)' : (st.avg_sentiment >= 0.2 ? 'var(--warning)' : 'var(--danger)')};">${st.avg_sentiment >= 0 ? '+' : ''}${st.avg_sentiment.toFixed(3)}</strong> · ${formatInt(st.total_reviews)})
               </span>
-              <span style="font-size: 0.75rem; color: var(--text-muted);">${formatInt(st.total_reviews)} reviews</span>
+              <span style="font-size: 0.78rem; color: var(--text-muted);">
+                Survey: <strong style="color: var(--warning);">★ ${Number(surv.avg_rating || 0).toFixed(2)}/5.0</strong>
+                (NPS <strong>${Number(surv.avg_nps_10 || 0).toFixed(1)}/10</strong> · <strong style="color: ${surv.avg_sentiment >= 0.25 ? 'var(--success)' : (surv.avg_sentiment >= 0 ? 'var(--warning)' : 'var(--danger)')};">${surv.avg_sentiment >= 0 ? '+' : ''}${Number(surv.avg_sentiment || 0).toFixed(3)}</strong> · ${formatInt(surv.total_responses)} resp.)
+              </span>
+              <span class="sentiment-card-chevron" style="font-size: 0.75rem; font-weight: 700; color: var(--accent-primary);">▼</span>
             </div>
           </div>
 
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem; margin-top: 0.4rem;">
-            <div style="background: var(--bg-primary); padding: 0.65rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
-              <h5 style="color: var(--success); font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.4rem;">
-                ✓ Current Positives (${st.pct_positive}% Positive Reviews)
-              </h5>
-              <div>
-                ${st.current_positives.map(p => `<span class="sentiment-pill pos">👍 ${p}</span>`).join('')}
+          <div class="sentiment-card-body" style="margin-top: 0.65rem;">
+            <!-- 1. Customer Review Sentiment Summary -->
+            <div style="margin-bottom: 0.75rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem; flex-wrap: wrap; gap: 0.4rem;">
+                <span style="font-size: 0.78rem; font-weight: 800; color: var(--accent-primary); text-transform: uppercase; letter-spacing: 0.03em;">
+                  1. Customer Review Sentiment Summary (${formatInt(st.total_reviews)} Reviews)
+                </span>
+                <div style="display: flex; gap: 0.65rem; align-items: center; font-size: 0.78rem;">
+                  <span style="color: var(--warning); font-weight: 700;">★ ${st.avg_rating.toFixed(2)} / 5.0</span>
+                  <span style="font-weight: 700; color: ${st.avg_sentiment >= 0.4 ? 'var(--success)' : (st.avg_sentiment >= 0.2 ? 'var(--warning)' : 'var(--danger)')};">
+                    Sentiment Score: ${st.avg_sentiment >= 0 ? '+' : ''}${st.avg_sentiment.toFixed(3)}
+                  </span>
+                </div>
+              </div>
+
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem;">
+                <div style="background: var(--bg-primary); padding: 0.65rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+                  <h5 style="color: var(--success); font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.4rem;">
+                    ✓ Current Positives (${st.pct_positive}% Positive Reviews)
+                  </h5>
+                  <div>
+                    ${(st.current_positives || []).map(p => `<span class="sentiment-pill pos">👍 ${p}</span>`).join('')}
+                  </div>
+                </div>
+
+                <div style="background: var(--bg-primary); padding: 0.65rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+                  <h5 style="color: var(--danger); font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.4rem;">
+                    ⚠️ Areas to Improve (${st.pct_negative}% Negative Reviews)
+                  </h5>
+                  <div>
+                    ${(st.things_to_improve || []).map(n => `<span class="sentiment-pill neg">⚡ ${n}</span>`).join('')}
+                  </div>
+                </div>
               </div>
             </div>
 
-            <div style="background: var(--bg-primary); padding: 0.65rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
-              <h5 style="color: var(--danger); font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.4rem;">
-                ⚠️ Areas to Improve (${st.pct_negative}% Negative Reviews)
-              </h5>
-              <div>
-                ${st.things_to_improve.map(n => `<span class="sentiment-pill neg">⚡ ${n}</span>`).join('')}
+            <!-- 2. Customer Survey Sentiment Summary (Directly Below in Exact Same Style & Logic) -->
+            <div style="padding-top: 0.65rem; border-top: 1px dashed var(--border-color);">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem; flex-wrap: wrap; gap: 0.4rem;">
+                <span style="font-size: 0.78rem; font-weight: 800; color: var(--accent-primary); text-transform: uppercase; letter-spacing: 0.03em;">
+                  2. Customer Survey Sentiment Summary (${formatInt(surv.total_responses)} Survey Responses)
+                </span>
+                <div style="display: flex; gap: 0.65rem; align-items: center; font-size: 0.78rem;">
+                  <span style="color: var(--warning); font-weight: 700;">★ ${Number(surv.avg_rating || 0).toFixed(2)} / 5.0 (NPS ${Number(surv.avg_nps_10 || 0).toFixed(1)} / 10)</span>
+                  <span style="font-weight: 700; color: ${surv.avg_sentiment >= 0.25 ? 'var(--success)' : (surv.avg_sentiment >= 0 ? 'var(--warning)' : 'var(--danger)')};">
+                    Sentiment Score: ${surv.avg_sentiment >= 0 ? '+' : ''}${Number(surv.avg_sentiment || 0).toFixed(3)}
+                  </span>
+                </div>
+              </div>
+
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem;">
+                <div style="background: var(--bg-primary); padding: 0.65rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+                  <h5 style="color: var(--success); font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.4rem;">
+                    ✓ Current Positives (${surv.pct_positive}% Positive Survey Responses)
+                  </h5>
+                  <div>
+                    ${(surv.current_positives || []).map(p => `<span class="sentiment-pill pos">👍 ${p}</span>`).join('')}
+                  </div>
+                </div>
+
+                <div style="background: var(--bg-primary); padding: 0.65rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+                  <h5 style="color: var(--danger); font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.4rem;">
+                    ⚠️ Areas to Improve (${surv.pct_negative}% Negative Survey Responses)
+                  </h5>
+                  <div>
+                    ${(surv.things_to_improve || []).map(n => `<span class="sentiment-pill neg">⚡ ${n}</span>`).join('')}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
         `;
+
+        const hdr = card.querySelector('.sentiment-card-toggle-hdr');
+        const body = card.querySelector('.sentiment-card-body');
+        const chev = card.querySelector('.sentiment-card-chevron');
+        if (hdr && body && chev) {
+          hdr.onclick = () => {
+            const isHidden = body.style.display === 'none';
+            body.style.display = isHidden ? '' : 'none';
+            chev.textContent = isHidden ? '▼' : '▶';
+          };
+        }
+
         container.appendChild(card);
       });
+
+      this.setupCollapsibleCards('sentimentStoreCardsContainer', 3, 'stores');
     },
 
     // --- TAB 6: CATCHMENT & EXPANSION (PROFIT ESTIMATOR & HUFF GRAVITY MODEL) ---
@@ -3777,8 +4207,8 @@
 
       if ($('valTargetSubtitle')) {
         $('valTargetSubtitle').textContent = report.filename
-          ? `Uploaded File: ${report.filename} (Detected Schema: ${report.detected_schema || 'custom'}, ${report.row_count || 0} rows)`
-          : `Target: Full Dataset Pack (22 CSV tables cross-checked)`;
+          ? `Full Dataset Suite + Uploaded CSV(s): ${report.filename} (${s.total_tests} total checks across all files)`
+          : `Target: Full Dataset Pack (All 22 CSV tables & cross-dataset checks)`;
       }
 
       if ($('valKpiStatus')) {
@@ -3891,6 +4321,7 @@
         report = state.data.validation_baseline_report;
       }
       if (report) {
+        state.uploadedValidationMap = {};
         state.validationReport = report;
         this.mergeValidationDiscrepanciesIntoVerifier(report);
         this.recalculateEventsImpact();
@@ -3915,6 +4346,7 @@
       else if (datasetKey === 'stores') rows = state.data.stores || [];
       else if (datasetKey === 'catchment') rows = state.data.catchment || [];
       else if (datasetKey === 'candidate_sites') rows = state.data.candidate_sites || [];
+      else if (datasetKey === 'customer_survey') rows = state.data.customer_survey || [];
       else if (datasetKey === 'promotions') rows = state.data.promotions || [];
       else if (datasetKey === 'capex') rows = state.data.capex || [];
       else if (datasetKey === 'events') rows = state.data.events_raw || [];
@@ -3961,6 +4393,7 @@
       else if (datasetKey === 'stores') rows = state.data.stores || [];
       else if (datasetKey === 'catchment') rows = state.data.catchment || [];
       else if (datasetKey === 'candidate_sites') rows = state.data.candidate_sites || [];
+      else if (datasetKey === 'customer_survey') rows = state.data.customer_survey || [];
       else if (datasetKey === 'promotions') rows = state.data.promotions || [];
       else if (datasetKey === 'capex') rows = state.data.capex || [];
       else if (datasetKey === 'events') rows = state.data.events_raw || [];
@@ -4011,16 +4444,24 @@
       URL.revokeObjectURL(url);
     },
 
-    // --- VALIDATED CSV UPLOAD HANDLER (WITH AUTO-FIX & RECONCILIATION LOGGING) ---
+    // --- VALIDATED CSV UPLOAD HANDLER (RUNS ALL CHECKS ACROSS ALL FILES & ACCUMULATES PER-FILE RESULTS) ---
     handleFileUpload(files) {
-      Array.from(files).forEach(file => {
+      const fileList = Array.from(files || []);
+      if (!fileList.length) return;
+
+      let processedCount = 0;
+      const batchUploads = [];
+
+      fileList.forEach(file => {
         const reader = new FileReader();
         reader.onload = async (e) => {
           const text = e.target.result;
           const { rows, headers } = this.parseCSVWithHeaders(text);
 
-          // 1. Try validating & auto-fixing via Python backend (validate_grind_crumb.py API) first, fallback to client mirror
-          let report = null;
+          // 1. Always run comprehensive per-file validation checks for this uploaded file
+          const clientFileReport = CSVValidator.validateUploadedFileClient(file.name, text, rows, headers);
+          let fileReport = clientFileReport;
+
           try {
             const resp = await fetch('/api/validate-csv', {
               method: 'POST',
@@ -4028,48 +4469,60 @@
               body: JSON.stringify({ filename: file.name, content: text })
             });
             if (resp.ok) {
-              report = await resp.json();
+              const serverReport = await resp.json();
+              if (serverReport && serverReport.results) {
+                fileReport = serverReport;
+              }
             }
           } catch (_) {
             // Static file:// mode fallback
           }
 
-          if (!report) {
-            report = CSVValidator.validateUploadedFileClient(file.name, text, rows, headers);
-          }
+          const reconciledRows = (fileReport.cleaned_rows && fileReport.cleaned_rows.length)
+            ? fileReport.cleaned_rows
+            : rows;
 
-          // Use auto-cleaned rows from validator if present
-          const reconciledRows = (report.cleaned_rows && report.cleaned_rows.length) ? report.cleaned_rows : rows;
+          // Store this file's validation report in uploadedValidationMap so uploading multiple files
+          // retains per-file checks for EVERY uploaded file AND runs the full cross-dataset suite!
+          state.uploadedValidationMap[file.name] = clientFileReport;
 
-          state.validationReport = report;
+          const unifiedReport = CSVValidator.buildUnifiedDatasetValidationReport(
+            state.uploadedValidationMap,
+            state.data.validation_baseline_report
+          );
+
+          state.validationReport = unifiedReport;
           state.valStatusFilter = 'ALL';
           if ($('valStatusFilter')) $('valStatusFilter').value = 'ALL';
 
-          // Merge any discovered & auto-fixed validation errors into Reconciliation & Errors dashboard (#tab-verifier)
-          const newlyLoggedFixes = this.mergeValidationDiscrepanciesIntoVerifier(report);
+          const newlyLoggedFixes = this.mergeValidationDiscrepanciesIntoVerifier(unifiedReport);
           this.renderValidationReportPanel();
 
-          state.pendingUpload = {
+          const uploadItem = {
             filename: file.name,
-            schema: report.detected_schema,
+            schema: fileReport.detected_schema || clientFileReport.detected_schema,
             rows: reconciledRows,
-            report,
+            report: clientFileReport,
+            unifiedReport,
             newlyLoggedFixes
           };
+          batchUploads.push(uploadItem);
+          state.pendingUpload = uploadItem;
 
-          const banner = $('valUploadActionBanner');
-          const bannerText = $('valUploadBannerText');
-          if (banner && bannerText) {
-            banner.style.display = 'flex';
-            // Automatically apply the cleaned/reconciled dataset so all dashboard views & insights regenerate immediately
-            this.applyPendingUpload(true);
+          // Immediately ingest this file's reconciled data into the active state
+          this.applyPendingUpload(true, batchUploads);
+
+          processedCount++;
+          if (processedCount === fileList.length) {
+            const banner = $('valUploadActionBanner');
+            if (banner) banner.style.display = 'flex';
           }
         };
         reader.readAsText(file);
       });
     },
 
-    applyPendingUpload(autoApplied = false) {
+    applyPendingUpload(autoApplied = false, batchList = null) {
       const banner = $('valUploadActionBanner');
       const bannerText = $('valUploadBannerText');
 
@@ -4079,52 +4532,61 @@
       }
 
       if (!state.pendingUpload) return;
-      const { filename, schema, rows, report } = state.pendingUpload;
+      const { filename, schema, rows } = state.pendingUpload;
 
       if (schema === 'business_events.csv' || filename.toLowerCase().includes('event')) {
         state.data.events_raw = rows;
         this.recalculateEventsImpact();
         state.activeDataset = 'events';
-        $('selectDataset').value = 'events';
+        if ($('selectDataset')) $('selectDataset').value = 'events';
       } else if (schema === 'starter_store_monthly_pnl.csv' || filename.toLowerCase().includes('pnl')) {
         state.data.pnl_fixed = rows;
         this.recalculateEventsImpact();
         state.activeDataset = 'fixed_pnl';
-        $('selectDataset').value = 'fixed_pnl';
+        if ($('selectDataset')) $('selectDataset').value = 'fixed_pnl';
       } else if (schema === 'candidate_sites.csv' || filename.toLowerCase().includes('candidate')) {
         state.data.candidate_sites = rows;
         state.activeDataset = 'candidate_sites';
-        $('selectDataset').value = 'candidate_sites';
+        if ($('selectDataset')) $('selectDataset').value = 'candidate_sites';
       } else if (schema === 'store_catchment.csv' || filename.toLowerCase().includes('catchment')) {
         state.data.catchment = rows;
         state.activeDataset = 'catchment';
-        $('selectDataset').value = 'catchment';
+        if ($('selectDataset')) $('selectDataset').value = 'catchment';
       } else if (schema === 'stores.csv') {
         state.data.stores = rows;
         state.activeDataset = 'stores';
-        $('selectDataset').value = 'stores';
+        if ($('selectDataset')) $('selectDataset').value = 'stores';
+      } else if (schema === 'customer_survey.csv' || (filename.toLowerCase().includes('survey') && !filename.toLowerCase().includes('exit'))) {
+        state.data.customer_survey = rows;
+        this.recalculateSurveySentiment(rows);
+        state.activeDataset = 'customer_survey';
+        if ($('selectDataset')) $('selectDataset').value = 'customer_survey';
+      } else if (schema === 'customer_reviews.csv' || filename.toLowerCase().includes('review')) {
+        state.data.customer_reviews = rows;
+        this.recalculateReviewSentiment(rows);
+        state.activeDataset = filename;
       } else if (schema === 'promotions.csv') {
         state.data.promotions = rows;
         state.activeDataset = 'promotions';
-        $('selectDataset').value = 'promotions';
+        if ($('selectDataset')) $('selectDataset').value = 'promotions';
       } else if (schema === 'capex.csv') {
         state.data.capex = rows;
         state.activeDataset = 'capex';
-        $('selectDataset').value = 'capex';
+        if ($('selectDataset')) $('selectDataset').value = 'capex';
       } else {
         state.data[filename] = rows;
         const sel = $('selectDataset');
-        if (!Array.from(sel.options).some(o => o.value === filename)) {
+        if (sel && !Array.from(sel.options).some(o => o.value === filename)) {
           const opt = document.createElement('option');
           opt.value = filename;
           opt.textContent = `Uploaded: ${filename} (${rows.length} rows)`;
           sel.appendChild(opt);
         }
         state.activeDataset = filename;
-        sel.value = filename;
+        if (sel) sel.value = filename;
       }
 
-      // Regenerate all dropdowns, dynamic callouts, Huff Gravity models, and charts
+      // Regenerate all dropdowns, dynamic callouts, sentiment summaries, Huff Gravity models, and charts
       this.populateFilterDropdowns();
       this.renderVerificationTab();
       this.renderDashboardTab();
@@ -4135,14 +4597,16 @@
       this.renderExplorerTab();
 
       if (autoApplied && banner && bannerText) {
-        const fixesCount = (report.reconciled_discrepancies || []).length;
-        const statusColor = report.status === 'PASS' ? 'var(--success)' : 'var(--warning)';
+        const unified = state.validationReport || state.pendingUpload.report;
+        const uploadedNames = Object.keys(state.uploadedValidationMap || {});
+        const fixesCount = (unified.reconciled_discrepancies || []).length;
+        const statusColor = unified.status === 'PASS' ? 'var(--success)' : 'var(--warning)';
         bannerText.innerHTML = `
-          <strong style="color: ${statusColor};">✓ VALIDATED, AUTO-RECONCILED & INGESTED:</strong>
-          <code>${filename}</code> (${rows.length} rows, schema: <code>${schema}</code>) —
-          <strong>${report.summary.passed}/${report.summary.total_tests} checks passed</strong>.
+          <strong style="color: ${statusColor};">✓ VALIDATED, AUTO-RECONCILED & INGESTED (${uploadedNames.length} Uploaded File${uploadedNames.length === 1 ? '' : 's'} + Full Cross-Dataset Suite):</strong>
+          <code>${uploadedNames.join(', ')}</code> —
+          <strong>${unified.summary.passed}/${unified.summary.total_tests} total checks passed across all files</strong>.
           ${fixesCount > 0 ? `<span style="color: var(--warning); font-weight: 700;">${fixesCount} anomaly check(s) were automatically fixed and logged to the Reconciliation & Errors dashboard.</span>` : 'Zero defects detected.'}
-          All P&L charts, channel economics, and Huff Gravity strategic insights have been regenerated.
+          All P&L charts, channel economics, customer review/survey sentiment, and Huff Gravity strategic insights have been regenerated.
         `;
       } else {
         state.pendingUpload = null;

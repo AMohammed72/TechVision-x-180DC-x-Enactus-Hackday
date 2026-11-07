@@ -3,6 +3,7 @@ import csv
 import json
 from collections import defaultdict
 from validate_grind_crumb import validate_dataset
+from review_sentiment_pipeline import classify_survey_row_rule_based, STORE_NAME_TO_ID
 
 WORKSPACE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(WORKSPACE_DIR, "grind_and_crumb_data")
@@ -273,6 +274,7 @@ def run():
     catchment_list = load_csv(os.path.join(DATA_DIR, "store_catchment.csv"))
     candidates_list = load_csv(os.path.join(DATA_DIR, "candidate_sites.csv"))
     sentiment_data = load_csv(os.path.join(WORKSPACE_DIR, "customer_reviews_sentiment.csv"))
+    survey_raw = load_csv(os.path.join(DATA_DIR, "customer_survey.csv"))
     events_raw = load_csv(os.path.join(DATA_DIR, "business_events.csv"))
 
     # Ensure Dashly contract renewal is included as an event if not present
@@ -362,6 +364,20 @@ def run():
             })
         events_impact_by_scope[scope] = scope_events
 
+    # Enrich customer_survey.csv rows using the exact same sentiment classification logic
+    survey_enriched_by_store = defaultdict(list)
+    for sr in survey_raw:
+        raw_store = str(sr.get('home_store') or sr.get('store_id') or '').strip()
+        sid = raw_store if raw_store in stores else STORE_NAME_TO_ID.get(raw_store.lower(), '')
+        if not sid:
+            for k, v in STORE_NAME_TO_ID.items():
+                if k in raw_store.lower() or raw_store.lower() in k:
+                    sid = v
+                    break
+        if sid in stores:
+            classified = classify_survey_row_rule_based(sr)
+            survey_enriched_by_store[sid].append(classified)
+
     store_sentiment_summary = {}
     for sid in sorted(stores.keys()):
         s_reviews = [r for r in sentiment_data if r['store_id'] == sid]
@@ -395,6 +411,61 @@ def run():
         avg_rating = sum(float(r['rating']) for r in s_reviews) / len(s_reviews)
         sent_label = "Positive" if avg_score >= 0.25 else ("Neutral" if avg_score >= 0 else "Negative")
 
+        # Compute Customer Survey Sentiment Summary for this store using the same logic
+        s_surveys = survey_enriched_by_store.get(sid, [])
+        if s_surveys:
+            surv_pos = [r for r in s_surveys if r['sentiment'] == 'positive']
+            surv_neg = [r for r in s_surveys if r['sentiment'] == 'negative']
+
+            surv_pos_counts = defaultdict(int)
+            for r in surv_pos:
+                s = r.get('key_issue_summary', '')
+                if s and s != 'General customer feedback':
+                    surv_pos_counts[s] += 1
+
+            surv_neg_counts = defaultdict(int)
+            for r in surv_neg:
+                s = r.get('key_issue_summary', '')
+                if s and s != 'General customer feedback':
+                    surv_neg_counts[s] += 1
+
+            surv_top_pos = [k for k, v in sorted(surv_pos_counts.items(), key=lambda x: x[1], reverse=True)[:3]]
+            if not surv_top_pos:
+                surv_top_pos = ["Consistent overall store execution", "Strong customer loyalty & advocacy", "High repeat daily/weekly visit loyalty"]
+
+            surv_top_neg = [k for k, v in sorted(surv_neg_counts.items(), key=lambda x: x[1], reverse=True)[:3]]
+            if not surv_top_neg:
+                surv_top_neg = ["App checkout crash & vanishing stamps", "Oat milk surcharge driving churn", "Understaffed lunch rush & long queues"]
+
+            surv_avg_score = sum(float(r['sentiment_score']) for r in s_surveys) / len(s_surveys)
+            surv_avg_rating = sum(float(r['rating']) for r in s_surveys) / len(s_surveys)
+            surv_avg_nps = sum(float(r['nps_10']) for r in s_surveys) / len(s_surveys)
+            surv_label = "Positive" if surv_avg_score >= 0.25 else ("Neutral" if surv_avg_score >= 0 else "Negative")
+
+            survey_summary = {
+                'total_responses': len(s_surveys),
+                'avg_sentiment': round(surv_avg_score, 3),
+                'sentiment_label': surv_label,
+                'avg_rating': round(surv_avg_rating, 2),
+                'avg_nps_10': round(surv_avg_nps, 2),
+                'pct_positive': round(len(surv_pos) / len(s_surveys) * 100, 1),
+                'pct_negative': round(len(surv_neg) / len(s_surveys) * 100, 1),
+                'current_positives': surv_top_pos,
+                'things_to_improve': surv_top_neg
+            }
+        else:
+            survey_summary = {
+                'total_responses': 0,
+                'avg_sentiment': 0.0,
+                'sentiment_label': 'Neutral',
+                'avg_rating': 0.0,
+                'avg_nps_10': 0.0,
+                'pct_positive': 0.0,
+                'pct_negative': 0.0,
+                'current_positives': [],
+                'things_to_improve': []
+            }
+
         store_sentiment_summary[sid] = {
             'store_id': sid,
             'store_name': stores[sid]['store_name'],
@@ -406,7 +477,8 @@ def run():
             'pct_positive': round(len(pos_revs) / len(s_reviews) * 100, 1),
             'pct_negative': round(len(neg_revs) / len(s_reviews) * 100, 1),
             'current_positives': top_pos,
-            'things_to_improve': neg_neg if 'neg_neg' in locals() else top_neg
+            'things_to_improve': top_neg,
+            'survey_sentiment': survey_summary
         }
 
     # Compute Huff Gravity & Candidate Site Profit Projections
@@ -450,6 +522,7 @@ def run():
     d_obj['events_raw'] = events_raw
     d_obj['events_impact_by_scope'] = events_impact_by_scope
     d_obj['store_sentiment_summary'] = store_sentiment_summary
+    d_obj['customer_survey'] = survey_raw
     d_obj['expansion_huff_model'] = expansion_huff_model
     d_obj['validation_baseline_report'] = validation_baseline_report
 

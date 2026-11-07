@@ -16,12 +16,9 @@
     <div class="brand-wrapper">
       <div class="brand-logo">GC</div>
       <div class="brand-title">
-        <h1>Grind & Crumb <span class="badge-tag success" id="statusBadge">Audited & Reconciled</span></h1>
+        <h1>Grind & Crumb</h1>
         <div class="brand-subtitle">Data Verifier, Multi-Store Comparison, Channel Economics & Huff Gravity Expansion</div>
       </div>
-    </div>
-    <div class="header-controls">
-      <span class="badge-tag" id="headerDatasetBadge">18 Source CSVs Linked</span>
     </div>
   </header>
 
@@ -138,7 +135,6 @@
       <div class="dashboard-card">
         <div class="card-header-flex">
           <h3 id="diffInspectorTitle">Deep-Dive Diff Inspector</h3>
-          <span class="status-badge reconciled" id="diffInspectorStatusBadge">Reconciled in Master File</span>
         </div>
         <div class="diff-container" id="diffInspectorContainer"></div>
       </div>
@@ -226,7 +222,7 @@
           <div class="event-tracker-panel" id="eventTrackerPanel">
             <div class="event-tracker-header">
               <h4 style="font-size: 0.9rem; font-weight: 700; display: flex; align-items: center; gap: 0.4rem;">
-                Event Profit Impact Tracker <span id="eventTrackerScopeBadge" class="badge-tag info">All Stores</span>
+                Event Profit Impact Tracker <span id="eventTrackerScopeBadge" style="font-size: 0.78rem; font-weight: 600; color: var(--text-muted);">(All Stores)</span>
               </h4>
               <span style="font-size: 0.75rem; color: var(--text-muted);">Calculated dynamically from active P&L & business_events.csv</span>
             </div>
@@ -293,7 +289,6 @@
       <div class="dashboard-card">
         <div class="card-header-flex">
           <h2>Multi-Store Profit / Loss Comparison Engine</h2>
-          <span class="badge-tag info">Compare 2 or More Stores</span>
         </div>
         <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.85rem;">
           Select two or more stores below to compare their revenue, cost structures, and monthly profit/loss trajectory side-by-side at any given time.
@@ -384,7 +379,6 @@
       <div class="dashboard-card">
         <div class="card-header-flex">
           <h2>Profit - Cost Comparison by Sales Channel</h2>
-          <span class="badge-tag danger">Channel Profitability Audit</span>
         </div>
         <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
           Dynamic breakdown of revenue, direct channel costs (commissions, packaging, packing labour, food cost), and net contribution across channels calculated directly from active P&L data.
@@ -423,11 +417,10 @@
     <section class="tab-panel" id="tab-sentiment">
       <div class="dashboard-card">
         <div class="card-header-flex">
-          <h2>Customer Review Sentiment Pipeline & Store Insights</h2>
-          <span class="badge-tag success">Powered by review_sentiment_pipeline.py</span>
+          <h2>Customer Review & Survey Sentiment Pipeline & Store Insights</h2>
         </div>
         <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.85rem;" id="sentimentSubtitleText">
-          Enriched customer reviews categorized by store with average sentiment, star ratings, current operational positives, and actionable areas to improve.
+          Enriched customer reviews and customer survey responses categorized by store with average sentiment, star ratings, current operational positives, and actionable areas to improve.
         </p>
 
         <div class="filter-bar">
@@ -488,7 +481,6 @@
       <div class="dashboard-card">
         <div class="card-header-flex">
           <h2>Candidate Expansion Profit Estimator & Huff Gravity Cannibalization Engine</h2>
-          <span class="badge-tag info">Huff Spatial Gravity Model: P_ij = (A_j / d_ij^λ) / Σ(A_k / d_ik^λ)</span>
         </div>
         <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.85rem;">
           Estimates potential monthly customer amounts and average customer spending for candidate expansion sites calibrated on existing stores, and applies a spatial <strong>Huff Gravity Model</strong> to quantify profit cannibalization on existing locations.
@@ -588,7 +580,6 @@
       <div class="dashboard-card">
         <div class="card-header-flex">
           <h3>Pairwise Huff Gravity Cannibalization Breakdown by Candidate Site</h3>
-          <span class="badge-tag warning">Distance Decay & Utility Diversion Analysis</span>
         </div>
         <div class="compare-grid" id="huffCannibalizationCardsGrid"></div>
       </div>
@@ -633,7 +624,6 @@
       <div class="dashboard-card">
         <div class="card-header-flex">
           <h2>Live CSV Upload, Automated Schema Validator & Dynamic Data Explorer</h2>
-          <span class="badge-tag info">Powered by validate_grind_crumb.py</span>
         </div>
         
         <div class="dropzone" id="dropzone">
@@ -654,7 +644,6 @@
           <div class="card-header-flex" style="flex-wrap: wrap;">
             <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">
               <h3 id="valReportTitle">CSV Validation Engine Report</h3>
-              <span class="badge-tag" id="valOverallBadge">READY</span>
               <span style="font-size: 0.75rem; color: var(--text-muted);" id="valTargetSubtitle">Target: Baseline Dataset Pack</span>
             </div>
             <div style="display: flex; gap: 0.5rem; align-items: center;">
@@ -738,6 +727,7 @@
               <option value="stores">Stores</option>
               <option value="catchment">Catchment Demographics</option>
               <option value="candidate_sites">Candidate Sites</option>
+              <option value="customer_survey">Customer Survey</option>
               <option value="promotions">Promotions</option>
               <option value="capex">Capex Log</option>
               <option value="events">Business Events</option>
