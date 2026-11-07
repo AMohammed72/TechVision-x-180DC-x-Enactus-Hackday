@@ -1,0 +1,6 @@
+category,severity,month,store_id,field,pnl_value,expected_value,description
+Footfall Discrepancy,HIGH,2025-12,S09,door_count,21721,30761,Underreported door count in PnL: 21721 vs Footfall log actual: 30761 (diff: +9040)
+Waste Data Quality,MEDIUM,ALL,ALL,units_wasted,129 missing values,Complete numeric units wasted,Imputed 129 missing 'units_wasted' records in waste_log.csv using unit cost benchmarks
+Waste Data Quality,LOW,ALL,ALL,date,273 irregular date strings,Standardized YYYY-MM-DD ISO format,Normalized 273 inconsistent date formats to standard ISO format in waste_log.csv
+Rota Data Quality,LOW,ALL,ALL,staff_rota_weekly.csv,1875 rows with Excel stray comments/columns,"Clean schema: (week_start, store_id, daypart, scheduled_hours, avg_hourly_wage_gbp)",Sanitized staff_rota_weekly.csv by removing stray spreadsheet formulas/notes and standardizing week_start dates
+Reviews Mapping,LOW,ALL,ALL,store_name_raw,Free-form raw store names,Resolved store_id and canonical store_name,Enriched all 3030 customer reviews with validated store_id (S01-S12) based on fuzzy name dictionary

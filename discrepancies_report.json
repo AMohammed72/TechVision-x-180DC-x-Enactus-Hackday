@@ -1,0 +1,52 @@
+[
+  {
+    "category": "Footfall Discrepancy",
+    "severity": "HIGH",
+    "month": "2025-12",
+    "store_id": "S09",
+    "field": "door_count",
+    "pnl_value": 21721,
+    "expected_value": 30761,
+    "description": "Underreported door count in PnL: 21721 vs Footfall log actual: 30761 (diff: +9040)"
+  },
+  {
+    "category": "Waste Data Quality",
+    "severity": "MEDIUM",
+    "month": "ALL",
+    "store_id": "ALL",
+    "field": "units_wasted",
+    "pnl_value": "129 missing values",
+    "expected_value": "Complete numeric units wasted",
+    "description": "Imputed 129 missing 'units_wasted' records in waste_log.csv using unit cost benchmarks"
+  },
+  {
+    "category": "Waste Data Quality",
+    "severity": "LOW",
+    "month": "ALL",
+    "store_id": "ALL",
+    "field": "date",
+    "pnl_value": "273 irregular date strings",
+    "expected_value": "Standardized YYYY-MM-DD ISO format",
+    "description": "Normalized 273 inconsistent date formats to standard ISO format in waste_log.csv"
+  },
+  {
+    "category": "Rota Data Quality",
+    "severity": "LOW",
+    "month": "ALL",
+    "store_id": "ALL",
+    "field": "staff_rota_weekly.csv",
+    "pnl_value": "1875 rows with Excel stray comments/columns",
+    "expected_value": "Clean schema: (week_start, store_id, daypart, scheduled_hours, avg_hourly_wage_gbp)",
+    "description": "Sanitized staff_rota_weekly.csv by removing stray spreadsheet formulas/notes and standardizing week_start dates"
+  },
+  {
+    "category": "Reviews Mapping",
+    "severity": "LOW",
+    "month": "ALL",
+    "store_id": "ALL",
+    "field": "store_name_raw",
+    "pnl_value": "Free-form raw store names",
+    "expected_value": "Resolved store_id and canonical store_name",
+    "description": "Enriched all 3030 customer reviews with validated store_id (S01-S12) based on fuzzy name dictionary"
+  }
+]

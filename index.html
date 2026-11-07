@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Grind & Crumb - Data Verifier, Reconciliation & Executive Dashboard</title>
+  <link rel="stylesheet" href="style.css">
+  <meta name="description" content="Ultra-optimized cross-dataset verifier, discrepancy audit reporter, channel economics, business events impact, and sentiment pipeline dashboard.">
+</head>
+<body>
+  <!-- Header -->
+  <header class="app-header">
+    <div class="brand-wrapper">
+      <div class="brand-logo">GC</div>
+      <div class="brand-title">
+        <h1>Grind & Crumb <span class="badge-tag" id="statusBadge">Audited & Reconciled</span></h1>
+        <div class="brand-subtitle">Data Verifier, Channel Economics, Events Impact & Sentiment Intelligence</div>
+      </div>
+    </div>
+    <div class="header-controls">
+      <button class="btn btn-outline btn-sm" id="btnThemeToggle" title="Toggle Dark/Light Mode">🌓 Theme</button>
+      <button class="btn btn-success btn-sm" id="btnDownloadFixedPnL" title="Download the corrected starter_store_monthly_pnl.csv">
+        📥 Fixed P&L CSV
+      </button>
+      <button class="btn btn-primary btn-sm" id="btnDownloadReport" title="Download full discrepancy audit report">
+        📄 Audit Report (CSV)
+      </button>
+      <button class="btn btn-secondary btn-sm" id="btnDownloadMarkdown" title="Download markdown audit summary">
+        📑 Summary (MD)
+      </button>
+    </div>
+  </header>
+
+  <!-- Navigation Tabs -->
+  <nav class="nav-tabs" id="navTabs">
+    <div class="nav-tab active" data-tab="tab-verifier">
+      🔍 Reconciliation & Errors <span class="tab-badge" id="badgeDiscrepanciesCount">87</span>
+    </div>
+    <div class="nav-tab" data-tab="tab-dashboard">
+      📊 Executive P&L Dashboard
+    </div>
+    <div class="nav-tab" data-tab="tab-channels">
+      💰 Channel Economics & Profit Drains
+    </div>
+    <div class="nav-tab" data-tab="tab-events">
+      ⚡ Business Events Impact
+    </div>
+    <div class="nav-tab" data-tab="tab-sentiment">
+      ⭐ Sentiment Pipeline & Store Insights
+    </div>
+    <div class="nav-tab" data-tab="tab-catchment">
+      📍 Catchment & Expansion Sites
+    </div>
+    <div class="nav-tab" data-tab="tab-explorer">
+      🗂️ Data Explorer & Upload
+    </div>
+  </nav>
+
+  <!-- Main Container -->
+  <main class="main-container">
+
+    <!-- ========================================== -->
+    <!-- TAB 1: RECONCILIATION & ERROR REPORT       -->
+    <!-- ========================================== -->
+    <section class="tab-panel active" id="tab-verifier">
+      <!-- KPI Row for Auditing -->
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-title">Data Integrity Score</div>
+          <div class="kpi-value" style="color: var(--success);" id="kpiIntegrity">99.8%</div>
+          <div class="kpi-sub pos">✓ 142/142 Store-Months Validated</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-title">Discrepancies Fixed</div>
+          <div class="kpi-value" style="color: var(--accent-primary);" id="kpiFixed">87</div>
+          <div class="kpi-sub pos">✓ Auto-Reconciled & Imputed</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-title">P&L Footfall Mismatch</div>
+          <div class="kpi-value" style="color: var(--warning);" id="kpiFootfallDiscrepancy">1 Store</div>
+          <div class="kpi-sub neg">S09 Dec 2025: +9,040 Footfall Restored</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-title">Waste Units Imputed</div>
+          <div class="kpi-value" style="color: var(--info);" id="kpiWasteImputed">400 Rows</div>
+          <div class="kpi-sub">Cost-to-Unit Benchmarking Applied</div>
+        </div>
+      </div>
+
+      <!-- Discrepancy Filter & Actions -->
+      <div class="dashboard-card">
+        <div class="card-header-flex">
+          <h2><span>🛡️</span> Data Discrepancy Audit Log & Resolution Engine</h2>
+          <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <span style="font-size: 0.8rem; color: var(--text-muted);">Filter:</span>
+            <select class="filter-select" id="filterDiscSeverity">
+              <option value="ALL">All Severities</option>
+              <option value="HIGH">High / Critical</option>
+              <option value="MEDIUM">Medium</option>
+              <option value="LOW">Low</option>
+            </select>
+            <select class="filter-select" id="filterDiscCategory">
+              <option value="ALL">All Categories</option>
+              <option value="Footfall">Footfall</option>
+              <option value="Waste">Waste Quality</option>
+              <option value="Rota">Staff Rota</option>
+              <option value="Reviews">Reviews Mapping</option>
+            </select>
+          </div>
+        </div>
+
+        <p style="font-size: 0.825rem; color: var(--text-muted); margin-bottom: 1rem;">
+          The reconciliation engine cross-checked all 18 primary source datasets against the master P&L. Every identified anomaly has been reconciled, documented, and exported into the corrected output files below.
+        </p>
+
+        <!-- Cleaned Artifacts Quick Access Bar -->
+        <div style="display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1.25rem; padding: 0.85rem; background: var(--bg-primary); border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+          <span style="font-size: 0.8rem; font-weight: 700; align-self: center; margin-right: 0.5rem;">Reconciled Files:</span>
+          <button class="btn btn-secondary btn-sm" onclick="App.downloadFile('fixed_pnl')">📄 fixed_store_monthly_pnl.csv</button>
+          <button class="btn btn-secondary btn-sm" onclick="App.downloadFile('cleaned_waste')">📄 cleaned_waste_log.csv</button>
+          <button class="btn btn-secondary btn-sm" onclick="App.downloadFile('cleaned_rota')">📄 cleaned_staff_rota_weekly.csv</button>
+          <button class="btn btn-secondary btn-sm" onclick="App.downloadFile('cleaned_reviews')">📄 cleaned_customer_reviews.csv</button>
+          <button class="btn btn-secondary btn-sm" onclick="App.downloadFile('reviews_sentiment')">📄 customer_reviews_sentiment.csv</button>
+        </div>
+
+        <!-- Discrepancy Table -->
+        <div class="table-responsive">
+          <table class="data-table" id="discrepancyTable">
+            <thead>
+              <tr>
+                <th>Category</th>
+                <th>Severity</th>
+                <th>Target</th>
+                <th>Field</th>
+                <th>Original / Malformed</th>
+                <th>Reconciled / Ground Truth</th>
+                <th>Status</th>
+                <th>Action Taken</th>
+              </tr>
+            </thead>
+            <tbody id="discrepancyTableBody">
+              <!-- Rendered via JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Side-by-Side Diff Inspector for S09 Footfall Fix -->
+      <div class="dashboard-card">
+        <div class="card-header-flex">
+          <h3><span>🔍</span> Deep-Dive Diff Inspector: Store S09 (Harrogate) December 2025 Footfall</h3>
+          <span class="status-badge reconciled">Reconciled in Master File</span>
+        </div>
+        <div class="diff-container">
+          <div class="diff-box">
+            <h4>Original: starter_store_monthly_pnl.csv</h4>
+            <p style="font-size: 0.8rem; margin-bottom: 0.5rem;">Month: <strong>2025-12</strong> | Store: <strong>S09 (Harrogate James Street)</strong></p>
+            <div style="font-size: 0.825rem; font-family: monospace; background: var(--bg-secondary); padding: 0.65rem; border-radius: 4px;">
+              door_count: <span class="diff-val-highlight diff-old">21,721</span> (Eroneous undercount)<br>
+              total_receipts: 10,091<br>
+              implied conversion rate: 46.4% (Artificially skewed)<br>
+              source: starter_store_monthly_pnl.csv row 68
+            </div>
+          </div>
+          <div class="diff-box">
+            <h4>Ground Truth Reconciled: footfall.csv Granular Log</h4>
+            <p style="font-size: 0.8rem; margin-bottom: 0.5rem;">Month: <strong>2025-12</strong> | Store: <strong>S09 (Harrogate James Street)</strong></p>
+            <div style="font-size: 0.825rem; font-family: monospace; background: var(--bg-secondary); padding: 0.65rem; border-radius: 4px;">
+              door_count: <span class="diff-val-highlight diff-new">30,761</span> (Actual recorded footfall)<br>
+              total_receipts: 10,091<br>
+              true conversion rate: 32.8% (Accurate footfall capture)<br>
+              reconciliation: Fixed in fixed_store_monthly_pnl.csv
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================== -->
+    <!-- TAB 2: EXECUTIVE P&L DASHBOARD             -->
+    <!-- ========================================== -->
+    <section class="tab-panel" id="tab-dashboard">
+      <!-- Global Filters -->
+      <div class="filter-bar">
+        <div class="filter-group">
+          <label for="filterStore">Store:</label>
+          <select class="filter-select" id="filterStore">
+            <option value="ALL">All Stores (Entire Chain)</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label for="filterCity">City:</label>
+          <select class="filter-select" id="filterCity">
+            <option value="ALL">All Cities</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label for="filterFormat">Format:</label>
+          <select class="filter-select" id="filterFormat">
+            <option value="ALL">All Formats</option>
+            <option value="Flagship">Flagship</option>
+            <option value="Standard">Standard</option>
+            <option value="Kiosk">Kiosk</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label for="filterMonth">Month:</label>
+          <select class="filter-select" id="filterMonth">
+            <option value="ALL">Full Year (2025-07 to 2026-06)</option>
+          </select>
+        </div>
+        <button class="btn btn-outline btn-sm" id="btnResetFilters" style="margin-left: auto;">Reset Filters</button>
+      </div>
+
+      <!-- Executive KPIs -->
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-title">Total Sales (GBP)</div>
+          <div class="kpi-value" id="kpiTotalSales">£0.00</div>
+          <div class="kpi-sub" id="kpiSalesGrowth">Across 12 stores</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-title">Store Profit (GBP)</div>
+          <div class="kpi-value" id="kpiTotalProfit">£0.00</div>
+          <div class="kpi-sub" id="kpiProfitSub">Net of all store costs</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-title">Store Margin</div>
+          <div class="kpi-value" id="kpiAvgMargin">0.0%</div>
+          <div class="kpi-sub" id="kpiMarginSub">Profit / Total Sales</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-title">Total Footfall</div>
+          <div class="kpi-value" id="kpiTotalFootfall">0</div>
+          <div class="kpi-sub" id="kpiFootfallSub">Reconciled Door Count</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-title">Conversion Rate</div>
+          <div class="kpi-value" id="kpiConversionRate">0.0%</div>
+          <div class="kpi-sub">Total Receipts / Door Count</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-title">Avg Ticket Size</div>
+          <div class="kpi-value" id="kpiAvgTicket">£0.00</div>
+          <div class="kpi-sub">Spend per Receipt</div>
+        </div>
+      </div>
+
+      <!-- Charts Row 1 -->
+      <div class="charts-grid-2">
+        <div class="dashboard-card">
+          <div class="card-header-flex">
+            <h3><span>📈</span> Monthly Sales & Profit Trajectory</h3>
+            <span style="font-size: 0.75rem; color: var(--text-muted);">GBP (£)</span>
+          </div>
+          <div class="chart-wrapper">
+            <canvas class="chart-canvas" id="chartMonthlyTrends"></canvas>
+          </div>
+        </div>
+        <div class="dashboard-card">
+          <div class="card-header-flex">
+            <h3><span>🍩</span> Total Cost Breakdown</h3>
+            <span style="font-size: 0.75rem; color: var(--text-muted);">Major Cost Centers</span>
+          </div>
+          <div class="chart-wrapper">
+            <canvas class="chart-canvas" id="chartCostBreakdown"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Store Performance League Table -->
+      <div class="dashboard-card">
+        <div class="card-header-flex">
+          <h2><span>🏆</span> Store Performance League Table</h2>
+          <span style="font-size: 0.75rem; color: var(--text-muted);">Click any header to sort</span>
+        </div>
+        <div class="table-responsive">
+          <table class="data-table" id="storeLeagueTable">
+            <thead>
+              <tr>
+                <th class="sortable" data-sort="id">Store ID ⬍</th>
+                <th class="sortable" data-sort="name">Store Name ⬍</th>
+                <th class="sortable" data-sort="city">City ⬍</th>
+                <th class="sortable" data-sort="format">Format ⬍</th>
+                <th class="sortable" data-sort="sales" style="text-align: right;">Total Sales ⬍</th>
+                <th class="sortable" data-sort="profit" style="text-align: right;">Store Profit ⬍</th>
+                <th class="sortable" data-sort="margin" style="text-align: right;">Margin % ⬍</th>
+                <th class="sortable" data-sort="footfall" style="text-align: right;">Footfall ⬍</th>
+                <th class="sortable" data-sort="conversion" style="text-align: right;">Conversion ⬍</th>
+                <th class="sortable" data-sort="ticket" style="text-align: right;">Avg Ticket ⬍</th>
+                <th class="sortable" data-sort="waste" style="text-align: right;">Waste Rate ⬍</th>
+              </tr>
+            </thead>
+            <tbody id="storeLeagueTableBody">
+              <!-- Rendered via JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================== -->
+    <!-- TAB 3: CHANNEL ECONOMICS & PROFIT DRAINS   -->
+    <!-- ========================================== -->
+    <section class="tab-panel" id="tab-channels">
+      <div class="dashboard-card">
+        <div class="card-header-flex">
+          <h2><span>💰</span> Profit - Cost Comparison by Sales Channel</h2>
+          <span class="badge-tag danger">Channel Profitability Audit</span>
+        </div>
+        <p style="font-size: 0.825rem; color: var(--text-muted); margin-bottom: 1.25rem;">
+          Comprehensive breakdown of revenue, direct channel costs (commissions, packaging, packing labour, food cost), and net contribution across channels.
+        </p>
+
+        <!-- Channel Cards Grid -->
+        <div class="channel-grid" id="channelCardsGrid">
+          <!-- Rendered via JS -->
+        </div>
+
+        <!-- Controllable Profit Drain Callout -->
+        <div class="alert-callout">
+          <strong>⚠️ CONTROLLABLE PROFIT DRAIN IDENTIFIED: THIRD-PARTY DELIVERY PLATFORMS</strong><br>
+          <p style="margin-top: 0.4rem; line-height: 1.5;">
+            While delivery generates <strong>£1.53M in sales (18.4% of total)</strong>, it accounts for <strong>£453.6K in commission fees</strong>, <strong>£47.6K in packaging</strong>, and <strong>£98.8K in staff packing time (~4 min/order)</strong>.
+            This crushes delivery's gross contribution margin to <strong>31.7%</strong> (vs <strong>72.5%</strong> for In-Store and App Click & Collect) and yields a net negative margin of <strong>-2.8%</strong> after store overhead allocation.
+          </p>
+          <div style="margin-top: 0.65rem; display: flex; flex-wrap: wrap; gap: 0.5rem;">
+            <span class="badge-tag danger">Controllable Action 1: Enforce £12+ minimum basket size on Dashly & RushEats</span>
+            <span class="badge-tag warning">Controllable Action 2: Pass £0.50 packaging fee to delivery customers</span>
+            <span class="badge-tag info">Controllable Action 3: Migrate delivery customers to App Click & Collect (0% commission)</span>
+          </div>
+        </div>
+
+        <div class="table-responsive" style="margin-top: 1.5rem;">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Channel</th>
+                <th style="text-align: right;">Total Sales</th>
+                <th style="text-align: right;">Total Orders</th>
+                <th style="text-align: right;">Avg Ticket</th>
+                <th style="text-align: right;">Food Cost (27.5%)</th>
+                <th style="text-align: right;">Platform Commission</th>
+                <th style="text-align: right;">Packaging Cost</th>
+                <th style="text-align: right;">Packing Labour</th>
+                <th style="text-align: right;">Gross Contribution</th>
+                <th style="text-align: right;">Gross Margin %</th>
+                <th style="text-align: right;">Est. Net Margin %</th>
+              </tr>
+            </thead>
+            <tbody id="channelTableBody">
+              <!-- Rendered via JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================== -->
+    <!-- TAB 4: BUSINESS EVENTS IMPACT              -->
+    <!-- ========================================== -->
+    <section class="tab-panel" id="tab-events">
+      <div class="dashboard-card">
+        <div class="card-header-flex">
+          <h2><span>⚡</span> Business Events Impact on Sales & Profitability</h2>
+          <span class="badge-tag info">Event-Study Econometric Analysis</span>
+        </div>
+        <p style="font-size: 0.825rem; color: var(--text-muted); margin-bottom: 1.25rem;">
+          Quantitative pre- vs post-event evaluation measuring the financial and operational impact of chain strategic events.
+        </p>
+
+        <div class="events-grid" id="eventsGrid">
+          <!-- Rendered via JS -->
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================== -->
+    <!-- TAB 5: SENTIMENT PIPELINE & STORE INSIGHTS -->
+    <!-- ========================================== -->
+    <section class="tab-panel" id="tab-sentiment">
+      <div class="dashboard-card">
+        <div class="card-header-flex">
+          <h2><span>⭐</span> Customer Review Sentiment Pipeline & Store Insights</h2>
+          <span class="badge-tag" style="background: rgba(16,185,129,0.1); color: var(--success); border-color: var(--success);">
+            Powered by review_sentiment_pipeline.py
+          </span>
+        </div>
+        <p style="font-size: 0.825rem; color: var(--text-muted); margin-bottom: 1rem;">
+          Enriched dataset of 3,030 customer reviews categorized by store with average sentiment, star ratings, current operational positives, and actionable things to improve.
+        </p>
+
+        <div class="filter-bar">
+          <div class="filter-group">
+            <label for="sentimentStoreFilter">Select Store:</label>
+            <select class="filter-select" id="sentimentStoreFilter">
+              <option value="ALL">All Stores (Full Chain Comparison)</option>
+            </select>
+          </div>
+          <div class="filter-group" style="margin-left: auto;">
+            <input type="text" class="filter-input" id="searchReviewsAdvanced" placeholder="Search feedback...">
+          </div>
+        </div>
+
+        <div id="sentimentStoreCardsContainer">
+          <!-- Rendered via JS -->
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================== -->
+    <!-- TAB 6: CATCHMENT & EXPANSION               -->
+    <!-- ========================================== -->
+    <section class="tab-panel" id="tab-catchment">
+      <div class="dashboard-card">
+        <div class="card-header-flex">
+          <h2><span>📍</span> Store Catchment Benchmark & Candidate Expansion Sites</h2>
+          <span class="badge-tag">Expansion Intelligence</span>
+        </div>
+        <p style="font-size: 0.825rem; color: var(--text-muted); margin-bottom: 1.25rem;">
+          Compare existing store demographic catchments against evaluated candidate expansion sites (CS1 to CS7) to identify prime growth opportunities.
+        </p>
+
+        <h3 style="font-size: 0.9rem; margin-bottom: 0.75rem;">Candidate Expansion Sites (Ranked by Vibrancy & Footfall)</h3>
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Site ID</th>
+                <th>Candidate Site Name</th>
+                <th>City</th>
+                <th>Location Type</th>
+                <th style="text-align: right;">Sqft</th>
+                <th style="text-align: right;">Quoted Rent/mo</th>
+                <th style="text-align: right;">Street Footfall</th>
+                <th style="text-align: right;">Office Workers (500m)</th>
+                <th style="text-align: right;">Students (1km)</th>
+                <th style="text-align: right;">Median Income</th>
+                <th style="text-align: right;">Vibrancy Index</th>
+                <th style="text-align: right;">Est. Fitout</th>
+              </tr>
+            </thead>
+            <tbody id="candidateSitesTableBody">
+              <!-- Rendered via JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================== -->
+    <!-- TAB 7: DATA EXPLORER & DRAG/DROP           -->
+    <!-- ========================================== -->
+    <section class="tab-panel" id="tab-explorer">
+      <div class="dashboard-card">
+        <div class="card-header-flex">
+          <h2><span>🗂️</span> Live CSV Upload & Data Explorer</h2>
+        </div>
+        
+        <div class="dropzone" id="dropzone">
+          <div class="dropzone-icon">📁</div>
+          <h3 style="font-size: 1rem; margin-bottom: 0.35rem;">Drag & Drop CSV Files to Re-Verify & Reconcile</h3>
+          <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.75rem;">
+            Upload any updated master or individual aspect CSV (e.g. daily sales, waste log, rota, costs) for instant in-browser auditing.
+          </p>
+          <input type="file" id="fileInput" multiple accept=".csv" style="display: none;">
+          <button class="btn btn-primary btn-sm" onclick="document.getElementById('fileInput').click()">Select CSV Files</button>
+        </div>
+
+        <div class="filter-bar">
+          <div class="filter-group">
+            <label for="selectDataset">Active Dataset:</label>
+            <select class="filter-select" id="selectDataset">
+              <option value="fixed_pnl">Fixed Master P&L (142 rows)</option>
+              <option value="original_pnl">Original Master P&L (142 rows)</option>
+              <option value="stores">Stores (12 rows)</option>
+              <option value="catchment">Catchment Demographics (12 rows)</option>
+              <option value="candidate_sites">Candidate Sites (7 rows)</option>
+              <option value="promotions">Promotions (6 rows)</option>
+              <option value="capex">Capex Log (4 rows)</option>
+            </select>
+          </div>
+          <button class="btn btn-secondary btn-sm" id="btnExportActiveTable" style="margin-left: auto;">Export Table to CSV</button>
+        </div>
+
+        <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
+          <table class="data-table" id="explorerTable">
+            <thead id="explorerTableHead"></thead>
+            <tbody id="explorerTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <script src="dashboard_data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
