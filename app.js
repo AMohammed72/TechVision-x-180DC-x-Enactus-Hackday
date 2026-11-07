@@ -1,7 +1,10 @@
 /**
  * Grind & Crumb - Ultra-Optimized Executive Dashboard & Data Verifier
  * High-performance Vanilla JavaScript, zero external dependencies.
- * Includes Channel Profitability, Business Events Impact & Sentiment Intelligence.
+ * Features:
+ * - Sortable store league tables by star rating and sentiment score
+ * - Interactive event markers on profit trajectory chart with store-specific & chain-wide impact
+ * - Fully modular reactive ingestion engine for dynamic CSV events & data updates
  */
 
 (function () {
@@ -23,6 +26,11 @@
     return (Number(num || 0) * 100).toFixed(1) + '%';
   };
 
+  const MONTH_LIST = [
+    '2025-07', '2025-08', '2025-09', '2025-10', '2025-11', '2025-12',
+    '2026-01', '2026-02', '2026-03', '2026-04', '2026-05', '2026-06'
+  ];
+
   // --- Application State ---
   const state = {
     data: window.DASHBOARD_DATA || null,
@@ -39,11 +47,12 @@
     discFilterSeverity: 'ALL',
     discFilterCategory: 'ALL',
     sentimentStoreFilter: 'ALL',
+    sentimentSortOrder: 'sentiment_desc',
     sentimentSearch: '',
     activeDataset: 'fixed_pnl'
   };
 
-  // --- High-Performance Micro-Canvas Charts ---
+  // --- High-Performance Micro-Canvas Charts with Event Annotation ---
   const MicroChart = {
     setupCanvas(canvas) {
       if (!canvas) return null;
@@ -56,7 +65,7 @@
       return { ctx, width: rect.width, height: rect.height };
     },
 
-    drawLineChart(canvasId, labels, datasets, yFormatter = formatGBP) {
+    drawLineChart(canvasId, labels, datasets, eventMarkers = [], yFormatter = formatGBP) {
       const canvas = $(canvasId);
       const setup = this.setupCanvas(canvas);
       if (!setup) return;
@@ -64,7 +73,7 @@
 
       ctx.clearRect(0, 0, width, height);
 
-      const padding = { top: 25, right: 20, bottom: 40, left: 65 };
+      const padding = { top: 38, right: 25, bottom: 40, left: 65 };
       const chartWidth = width - padding.left - padding.right;
       const chartHeight = height - padding.top - padding.bottom;
 
@@ -74,7 +83,7 @@
       });
       maxVal = maxVal * 1.15 || 100;
 
-      // Grid lines
+      // Horizontal Grid lines
       ctx.lineWidth = 1;
       ctx.strokeStyle = state.theme === 'dark' ? '#334155' : '#e2e8f0';
       ctx.fillStyle = state.theme === 'dark' ? '#94a3b8' : '#64748b';
@@ -92,7 +101,7 @@
         ctx.fillText(yFormatter(val), padding.left - 8, y + 3);
       }
 
-      // X Axis Labels
+      // X Axis Month Labels
       ctx.textAlign = 'center';
       const stepX = chartWidth / (labels.length - 1 || 1);
       labels.forEach((lbl, idx) => {
@@ -100,7 +109,36 @@
         ctx.fillText(lbl, x, height - padding.bottom + 18);
       });
 
-      // Draw Lines
+      // Draw Event Markers (Dashed vertical lines & badges)
+      eventMarkers.forEach((ev, evIdx) => {
+        if (ev.monthIdx >= 0 && ev.monthIdx < labels.length) {
+          const x = padding.left + ev.monthIdx * stepX;
+          
+          ctx.save();
+          ctx.beginPath();
+          ctx.setLineDash([3, 3]);
+          ctx.strokeStyle = ev.color || '#f59e0b';
+          ctx.lineWidth = 1.5;
+          ctx.moveTo(x, padding.top - 8);
+          ctx.lineTo(x, padding.top + chartHeight);
+          ctx.stroke();
+          ctx.restore();
+
+          // Event Badge Pin at top
+          ctx.fillStyle = ev.color || '#f59e0b';
+          ctx.beginPath();
+          const badgeY = padding.top - 18 - (evIdx % 2) * 12; // alternate heights if close
+          ctx.roundRect ? ctx.roundRect(x - 28, badgeY, 56, 16, 4) : ctx.rect(x - 28, badgeY, 56, 16);
+          ctx.fill();
+
+          ctx.fillStyle = '#0f172a';
+          ctx.font = 'bold 9px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText(ev.badgeText || `EV${evIdx + 1}`, x, badgeY + 11);
+        }
+      });
+
+      // Draw Dataset Lines
       datasets.forEach(ds => {
         ctx.beginPath();
         ctx.strokeStyle = ds.color || '#38bdf8';
@@ -114,6 +152,7 @@
         });
         ctx.stroke();
 
+        // Data point circles
         ctx.fillStyle = ds.color || '#38bdf8';
         labels.forEach((lbl, idx) => {
           const x = padding.left + idx * stepX;
@@ -124,15 +163,15 @@
         });
       });
 
-      // Legend
+      // Top Legend
       let legX = padding.left;
       datasets.forEach(ds => {
         ctx.fillStyle = ds.color;
-        ctx.fillRect(legX, 8, 12, 4);
+        ctx.fillRect(legX, 6, 12, 4);
         ctx.fillStyle = state.theme === 'dark' ? '#cbd5e1' : '#334155';
         ctx.font = '11px sans-serif';
         ctx.textAlign = 'left';
-        ctx.fillText(ds.label, legX + 16, 12);
+        ctx.fillText(ds.label, legX + 16, 10);
         legX += ctx.measureText(ds.label).width + 36;
       });
     },
@@ -254,6 +293,7 @@
         this.renderDiscrepancyTable();
       });
 
+      // League Table sorting (Supports sales, profit, margin, footfall, conversion, ticket, rating, sentiment)
       $$('#storeLeagueTable th.sortable').forEach(th => {
         th.addEventListener('click', () => {
           const col = th.dataset.sort;
@@ -263,6 +303,11 @@
         });
       });
 
+      // Sentiment Store Sorting & Search
+      $('sortSentimentStores').addEventListener('change', (e) => {
+        state.sentimentSortOrder = e.target.value;
+        this.renderSentimentPipelineTab();
+      });
       $('sentimentStoreFilter').addEventListener('change', (e) => {
         state.sentimentStoreFilter = e.target.value;
         this.renderSentimentPipelineTab();
@@ -283,6 +328,7 @@
       $('btnDownloadReport').addEventListener('click', () => this.downloadFile('report_csv'));
       $('btnDownloadMarkdown').addEventListener('click', () => this.downloadFile('summary_md'));
 
+      // Drag & Drop Live Ingestion
       const dropzone = $('dropzone');
       dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
       dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
@@ -329,11 +375,7 @@
         citySelect.appendChild(opt);
       });
 
-      const months = [
-        '2025-07', '2025-08', '2025-09', '2025-10', '2025-11', '2025-12',
-        '2026-01', '2026-02', '2026-03', '2026-04', '2026-05', '2026-06'
-      ];
-      months.forEach(m => {
+      MONTH_LIST.forEach(m => {
         const opt = document.createElement('option');
         opt.value = m;
         opt.textContent = m;
@@ -381,7 +423,7 @@
       });
     },
 
-    // --- TAB 2: EXECUTIVE DASHBOARD ---
+    // --- TAB 2: EXECUTIVE P&L DASHBOARD WITH INTEGRATED EVENTS TRAJECTORY ---
     getFilteredPnL() {
       const pnl = state.data.pnl_fixed || [];
       const storeMap = {};
@@ -399,6 +441,7 @@
 
     renderDashboardTab() {
       const rows = this.getFilteredPnL();
+      const selectedStore = state.filters.store;
 
       let totalSales = 0, totalProfit = 0, totalFootfall = 0, totalReceipts = 0;
       let totalFoodCost = 0, totalLabourCost = 0, totalRent = 0, totalRates = 0;
@@ -434,22 +477,55 @@
       $('kpiConversionRate').textContent = formatPct(conversionRate);
       $('kpiAvgTicket').textContent = formatGBP(avgTicket);
 
-      const months = [
-        '2025-07', '2025-08', '2025-09', '2025-10', '2025-11', '2025-12',
-        '2026-01', '2026-02', '2026-03', '2026-04', '2026-05', '2026-06'
-      ];
-      const salesByMonth = months.map(m => {
+      // Trajectory Scope label
+      $('trajectoryScopeLabel').textContent = selectedStore === 'ALL'
+        ? 'Scope: Chain-Wide (All 12 Stores)'
+        : `Scope: Store ${selectedStore} (${(state.data.stores.find(s=>s.store_id===selectedStore)||{}).store_name || selectedStore})`;
+
+      // Monthly sales & profit series
+      const salesByMonth = MONTH_LIST.map(m => {
         return rows.filter(r => r.month === m).reduce((acc, r) => acc + Number(r.total_sales_gbp || 0), 0);
       });
-      const profitByMonth = months.map(m => {
+      const profitByMonth = MONTH_LIST.map(m => {
         return rows.filter(r => r.month === m).reduce((acc, r) => acc + Number(r.store_profit_gbp || 0), 0);
       });
 
-      MicroChart.drawLineChart('chartMonthlyTrends', months.map(m => m.slice(5)), [
-        { label: 'Total Sales (£)', data: salesByMonth, color: '#38bdf8' },
-        { label: 'Store Profit (£)', data: profitByMonth, color: '#10b981' }
-      ]);
+      // Prepare Event Markers for Canvas
+      const scopeEvents = (state.data.events_impact_by_scope && state.data.events_impact_by_scope[selectedStore])
+        ? state.data.events_impact_by_scope[selectedStore]
+        : (state.data.events_impact_by_scope ? state.data.events_impact_by_scope["ALL"] : []);
 
+      const eventMarkers = scopeEvents.map((ev, i) => {
+        let badgeColor = '#f59e0b';
+        let badgeText = `EV${i+1}`;
+        if (ev.event.includes('Trinity')) { badgeColor = '#38bdf8'; badgeText = 'Trinity'; }
+        else if (ev.event.includes('Oat')) { badgeColor = '#10b981'; badgeText = 'Oat +40p'; }
+        else if (ev.event.includes('v3.0')) { badgeColor = '#ef4444'; badgeText = 'App v3'; }
+        else if (ev.event.includes('Wage') || ev.event.includes('Dashly')) { badgeColor = '#8b5cf6'; badgeText = 'Wage/Fee'; }
+        
+        return {
+          monthIdx: ev.month_idx,
+          label: ev.event,
+          eventName: ev.event,
+          color: badgeColor,
+          badgeText: badgeText
+        };
+      });
+
+      MicroChart.drawLineChart(
+        'chartMonthlyTrends',
+        MONTH_LIST.map(m => m.slice(5)),
+        [
+          { label: 'Total Sales (£)', data: salesByMonth, color: '#38bdf8' },
+          { label: 'Store Profit (£)', data: profitByMonth, color: '#10b981' }
+        ],
+        eventMarkers
+      );
+
+      // Render the Event Trajectory Impact Cards beneath the chart
+      this.renderEventTrackerPanel(selectedStore);
+
+      // Cost Breakdown Donut Chart
       MicroChart.drawDonutChart('chartCostBreakdown', [
         { label: 'Labour', value: totalLabourCost, color: '#38bdf8' },
         { label: 'Food Cost', value: totalFoodCost, color: '#f59e0b' },
@@ -462,14 +538,61 @@
       this.renderStoreLeagueTable();
     },
 
+    // --- EVENT TRAJECTORY IMPACT TRACKER (STORE-SPECIFIC & GENERAL) ---
+    renderEventTrackerPanel(selectedStore) {
+      const container = $('eventTrackerCardsContainer');
+      const scopeBadge = $('eventTrackerScopeBadge');
+      container.innerHTML = '';
+
+      const scopeKey = selectedStore || "ALL";
+      scopeBadge.textContent = scopeKey === "ALL" ? "Chain-Wide (All Stores)" : `Store ${scopeKey}`;
+
+      const eventsList = (state.data.events_impact_by_scope && state.data.events_impact_by_scope[scopeKey])
+        ? state.data.events_impact_by_scope[scopeKey]
+        : [];
+
+      if (!eventsList.length) {
+        container.innerHTML = '<div style="color: var(--text-muted); font-size: 0.8rem;">No events data available for active scope.</div>';
+        return;
+      }
+
+      eventsList.forEach(ev => {
+        const isUp = ev.delta_profit >= 0;
+        const card = document.createElement('div');
+        card.className = 'event-tracker-card';
+        card.innerHTML = `
+          <div class="event-tracker-title">
+            <span>${ev.event}</span>
+            <span class="event-shift-badge ${isUp ? 'up' : 'down'}">
+              ${isUp ? '▲ +' : '▼ -'}${formatGBP(Math.abs(ev.delta_profit))} (${isUp ? '+' : ''}${ev.pct_profit}%)
+            </span>
+          </div>
+          <div style="font-size: 0.725rem; color: var(--text-dim);">
+            📅 ${ev.date} | Month Shift: ${ev.pre_month} ➔ ${ev.post_month}
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 0.775rem; margin-top: 0.35rem; background: var(--bg-secondary); padding: 4px 8px; border-radius: 4px;">
+            <span>Profit: <strong>${formatGBP(ev.pre_profit)}</strong> ➔ <strong>${formatGBP(ev.post_profit)}</strong></span>
+            <span>Sales: <strong>${formatGBP(ev.pre_sales)}</strong> ➔ <strong>${formatGBP(ev.post_sales)}</strong></span>
+          </div>
+          <div class="event-tracker-detail">
+            ${ev.description}
+          </div>
+        `;
+        container.appendChild(card);
+      });
+    },
+
+    // --- LEAGUE TABLE (SORTABLE BY STAR RATING & SENTIMENT) ---
     renderStoreLeagueTable() {
       const tbody = $('storeLeagueTableBody');
       tbody.innerHTML = '';
       const pnlRows = state.data.pnl_fixed || [];
       const stores = state.data.stores || [];
+      const sentimentMap = state.data.store_sentiment_summary || {};
 
       const storeStats = {};
       stores.forEach(s => {
+        const sent = sentimentMap[s.store_id] || { avg_rating: 3.9, avg_sentiment: 0.38 };
         storeStats[s.store_id] = {
           id: s.store_id,
           name: s.store_name,
@@ -478,7 +601,9 @@
           sales: 0,
           profit: 0,
           footfall: 0,
-          receipts: 0
+          receipts: 0,
+          rating: Number(sent.avg_rating || 3.9),
+          sentiment: Number(sent.avg_sentiment || 0.38)
         };
       });
 
@@ -505,6 +630,12 @@
         } else if (state.sortColumn === 'ticket') {
           va = a.receipts > 0 ? a.sales / a.receipts : 0;
           vb = b.receipts > 0 ? b.sales / b.receipts : 0;
+        } else if (state.sortColumn === 'rating') {
+          va = a.rating;
+          vb = b.rating;
+        } else if (state.sortColumn === 'sentiment') {
+          va = a.sentiment;
+          vb = b.sentiment;
         } else {
           va = a[state.sortColumn] || 0;
           vb = b[state.sortColumn] || 0;
@@ -526,10 +657,13 @@
           <td style="text-align: right; font-weight: 600;">${formatGBP(st.sales)}</td>
           <td style="text-align: right; font-weight: 700; color: ${st.profit >= 0 ? 'var(--success)' : 'var(--danger)'};">${formatGBP(st.profit)}</td>
           <td style="text-align: right; font-weight: 600;">${formatPct(margin)}</td>
+          <td style="text-align: right; font-weight: 700; color: var(--warning);">★ ${st.rating.toFixed(2)}</td>
+          <td style="text-align: right; font-weight: 700; color: ${st.sentiment >= 0.4 ? 'var(--success)' : (st.sentiment >= 0 ? 'var(--accent-primary)' : 'var(--danger)')};">
+            ${st.sentiment >= 0 ? '+' : ''}${st.sentiment.toFixed(3)}
+          </td>
           <td style="text-align: right;">${formatInt(st.footfall)}</td>
           <td style="text-align: right;">${formatPct(conv)}</td>
           <td style="text-align: right;">${formatGBP(ticket)}</td>
-          <td style="text-align: right;">~9.1%</td>
         `;
         tbody.appendChild(tr);
       });
@@ -544,7 +678,6 @@
       tbody.innerHTML = '';
 
       channels.forEach(ch => {
-        // Card
         const card = document.createElement('div');
         card.className = `channel-card ${ch.is_profit_drain ? 'drain' : ''}`;
         card.innerHTML = `
@@ -596,7 +729,6 @@
         `;
         grid.appendChild(card);
 
-        // Table row
         const tr = document.createElement('tr');
         tr.innerHTML = `
           <td><strong>${ch.channel}</strong></td>
@@ -648,15 +780,16 @@
       });
     },
 
-    // --- TAB 5: SENTIMENT PIPELINE & STORE INSIGHTS ---
+    // --- TAB 5: SENTIMENT PIPELINE & STORE INSIGHTS (WITH SORTING) ---
     renderSentimentPipelineTab() {
       const container = $('sentimentStoreCardsContainer');
       container.innerHTML = '';
       const insights = state.data.store_sentiment_summary || {};
       const targetStore = state.sentimentStoreFilter;
       const search = state.sentimentSearch;
+      const sortOrder = state.sentimentSortOrder;
 
-      const entries = Object.values(insights).filter(st => {
+      let entries = Object.values(insights).filter(st => {
         if (targetStore !== 'ALL' && st.store_id !== targetStore) return false;
         if (search) {
           const matchName = st.store_name.toLowerCase().includes(search);
@@ -665,6 +798,17 @@
           if (!matchName && !matchPos && !matchNeg) return false;
         }
         return true;
+      });
+
+      // Sort Store Cards
+      entries.sort((a, b) => {
+        if (sortOrder === 'sentiment_desc') return b.avg_sentiment - a.avg_sentiment;
+        if (sortOrder === 'sentiment_asc') return a.avg_sentiment - b.avg_sentiment;
+        if (sortOrder === 'rating_desc') return b.avg_rating - a.avg_rating;
+        if (sortOrder === 'rating_asc') return a.avg_rating - b.avg_rating;
+        if (sortOrder === 'reviews_desc') return b.total_reviews - a.total_reviews;
+        if (sortOrder === 'id_asc') return a.store_id.localeCompare(b.store_id);
+        return 0;
       });
 
       if (!entries.length) {
@@ -682,9 +826,9 @@
               <span style="font-size: 0.8rem; color: var(--text-dim); margin-left: 0.5rem;">(${st.city})</span>
             </div>
             <div style="display: flex; gap: 0.75rem; align-items: center;">
-              <span style="font-size: 0.8rem; color: var(--warning); font-weight: 700;">★ ${st.avg_rating} / 5.0</span>
+              <span style="font-size: 0.85rem; color: var(--warning); font-weight: 700;">★ ${st.avg_rating.toFixed(2)} / 5.0</span>
               <span class="badge-tag ${st.avg_sentiment >= 0.4 ? 'success' : (st.avg_sentiment >= 0.2 ? 'warning' : 'danger')}">
-                Sentiment: ${st.avg_sentiment >= 0 ? '+' : ''}${st.avg_sentiment}
+                Sentiment: ${st.avg_sentiment >= 0 ? '+' : ''}${st.avg_sentiment.toFixed(3)}
               </span>
               <span style="font-size: 0.75rem; color: var(--text-muted);">${formatInt(st.total_reviews)} reviews</span>
             </div>
@@ -740,7 +884,7 @@
       });
     },
 
-    // --- TAB 7: DATA EXPLORER ---
+    // --- TAB 7: DATA EXPLORER & DYNAMIC INGESTION ---
     renderExplorerTab() {
       const datasetKey = state.activeDataset;
       let rows = [];
@@ -751,6 +895,7 @@
       else if (datasetKey === 'candidate_sites') rows = state.data.candidate_sites || [];
       else if (datasetKey === 'promotions') rows = state.data.promotions || [];
       else if (datasetKey === 'capex') rows = state.data.capex || [];
+      else if (datasetKey === 'events') rows = state.data.events_raw || [];
 
       const thead = $('explorerTableHead');
       const tbody = $('explorerTableBody');
@@ -792,6 +937,7 @@
       else if (datasetKey === 'candidate_sites') rows = state.data.candidate_sites || [];
       else if (datasetKey === 'promotions') rows = state.data.promotions || [];
       else if (datasetKey === 'capex') rows = state.data.capex || [];
+      else if (datasetKey === 'events') rows = state.data.events_raw || [];
 
       if (!rows.length) return;
       const headers = Object.keys(rows[0]);
@@ -850,6 +996,7 @@
       URL.revokeObjectURL(url);
     },
 
+    // --- DYNAMIC RE-INGESTION HANDLER ---
     handleFileUpload(files) {
       Array.from(files).forEach(file => {
         const reader = new FileReader();
@@ -857,13 +1004,85 @@
           const text = e.target.result;
           const rows = this.parseCSVText(text);
           if (rows.length) {
-            alert(`Successfully loaded '${file.name}' with ${rows.length} rows into active memory!`);
+            const fname = file.name.toLowerCase();
+            
+            // Check if uploaded file is business_events.csv
+            if (fname.includes('event')) {
+              state.data.events_raw = rows;
+              alert(`Modular Engine: Dynamically loaded ${rows.length} business events from '${file.name}'! Re-calculating trajectory impacts...`);
+              this.recalculateEventsImpact();
+              this.renderDashboardTab();
+              this.renderEventsImpactTab();
+            } else if (fname.includes('pnl')) {
+              state.data.pnl_fixed = rows;
+              alert(`Modular Engine: Loaded ${rows.length} P&L rows. Re-calculating all dashboard metrics...`);
+              this.renderDashboardTab();
+              this.renderChannelEconomicsTab();
+            } else {
+              alert(`Successfully loaded '${file.name}' with ${rows.length} rows into active memory!`);
+            }
             state.data[file.name] = rows;
             this.renderExplorerTab();
           }
         };
         reader.readAsText(file);
       });
+    },
+
+    // Dynamic modular recalculation for business events added in real time
+    recalculateEventsImpact() {
+      const events = state.data.events_raw || [];
+      const pnl = state.data.pnl_fixed || [];
+      const stores = state.data.stores || [];
+      const scopes = ["ALL"].concat(stores.map(s => s.store_id));
+
+      const getMetrics = (scope) => {
+        const mObj = {};
+        MONTH_LIST.forEach(m => {
+          let rows = pnl.filter(r => r.month === m);
+          if (scope !== "ALL") rows = rows.filter(r => r.store_id === scope);
+          const sales = rows.reduce((acc, r) => acc + Number(r.total_sales_gbp || 0), 0);
+          const profit = rows.reduce((acc, r) => acc + Number(r.store_profit_gbp || 0), 0);
+          mObj[m] = { sales, profit };
+        });
+        return mObj;
+      };
+
+      const impactByScope = {};
+      scopes.forEach(scope => {
+        const metrics = getMetrics(scope);
+        const list = [];
+        events.forEach(ev => {
+          const mStr = (ev.date || '').slice(0, 7);
+          const idx = MONTH_LIST.indexOf(mStr);
+          const preM = idx > 0 ? MONTH_LIST[idx - 1] : mStr;
+          const postM = idx < MONTH_LIST.length - 1 ? MONTH_LIST[idx + 1] : mStr;
+
+          const preProfit = (metrics[preM] || {}).profit || 0;
+          const postProfit = (metrics[postM] || {}).profit || 0;
+          const delta = postProfit - preProfit;
+          const pct = preProfit !== 0 ? (delta / Math.abs(preProfit)) * 100 : 0;
+
+          list.push({
+            event: ev.event || ev.name,
+            date: ev.date,
+            month: mStr,
+            month_idx: idx,
+            pre_month: preM,
+            post_month: postM,
+            pre_profit: preProfit,
+            post_profit: postProfit,
+            delta_profit: delta,
+            pct_profit: Number(pct.toFixed(1)),
+            pre_sales: (metrics[preM] || {}).sales || 0,
+            post_sales: (metrics[postM] || {}).sales || 0,
+            description: ev.description || 'Custom business event'
+          });
+        });
+        impactByScope[scope] = list;
+      });
+
+      state.data.events_impact_by_scope = impactByScope;
     },
 
     parseCSVText(text) {

@@ -14,7 +14,7 @@
       <div class="brand-logo">GC</div>
       <div class="brand-title">
         <h1>Grind & Crumb <span class="badge-tag" id="statusBadge">Audited & Reconciled</span></h1>
-        <div class="brand-subtitle">Data Verifier, Channel Economics, Events Impact & Sentiment Intelligence</div>
+        <div class="brand-subtitle">Data Verifier, Channel Economics, Events Trajectory & Sentiment Intelligence</div>
       </div>
     </div>
     <div class="header-controls">
@@ -63,7 +63,6 @@
     <!-- TAB 1: RECONCILIATION & ERROR REPORT       -->
     <!-- ========================================== -->
     <section class="tab-panel active" id="tab-verifier">
-      <!-- KPI Row for Auditing -->
       <div class="kpi-grid">
         <div class="kpi-card">
           <div class="kpi-title">Data Integrity Score</div>
@@ -87,7 +86,6 @@
         </div>
       </div>
 
-      <!-- Discrepancy Filter & Actions -->
       <div class="dashboard-card">
         <div class="card-header-flex">
           <h2><span>🛡️</span> Data Discrepancy Audit Log & Resolution Engine</h2>
@@ -113,7 +111,6 @@
           The reconciliation engine cross-checked all 18 primary source datasets against the master P&L. Every identified anomaly has been reconciled, documented, and exported into the corrected output files below.
         </p>
 
-        <!-- Cleaned Artifacts Quick Access Bar -->
         <div style="display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1.25rem; padding: 0.85rem; background: var(--bg-primary); border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
           <span style="font-size: 0.8rem; font-weight: 700; align-self: center; margin-right: 0.5rem;">Reconciled Files:</span>
           <button class="btn btn-secondary btn-sm" onclick="App.downloadFile('fixed_pnl')">📄 fixed_store_monthly_pnl.csv</button>
@@ -123,7 +120,6 @@
           <button class="btn btn-secondary btn-sm" onclick="App.downloadFile('reviews_sentiment')">📄 customer_reviews_sentiment.csv</button>
         </div>
 
-        <!-- Discrepancy Table -->
         <div class="table-responsive">
           <table class="data-table" id="discrepancyTable">
             <thead>
@@ -138,14 +134,11 @@
                 <th>Action Taken</th>
               </tr>
             </thead>
-            <tbody id="discrepancyTableBody">
-              <!-- Rendered via JS -->
-            </tbody>
+            <tbody id="discrepancyTableBody"></tbody>
           </table>
         </div>
       </div>
 
-      <!-- Side-by-Side Diff Inspector for S09 Footfall Fix -->
       <div class="dashboard-card">
         <div class="card-header-flex">
           <h3><span>🔍</span> Deep-Dive Diff Inspector: Store S09 (Harrogate) December 2025 Footfall</h3>
@@ -180,7 +173,6 @@
     <!-- TAB 2: EXECUTIVE P&L DASHBOARD             -->
     <!-- ========================================== -->
     <section class="tab-panel" id="tab-dashboard">
-      <!-- Global Filters -->
       <div class="filter-bar">
         <div class="filter-group">
           <label for="filterStore">Store:</label>
@@ -212,12 +204,11 @@
         <button class="btn btn-outline btn-sm" id="btnResetFilters" style="margin-left: auto;">Reset Filters</button>
       </div>
 
-      <!-- Executive KPIs -->
       <div class="kpi-grid">
         <div class="kpi-card">
           <div class="kpi-title">Total Sales (GBP)</div>
           <div class="kpi-value" id="kpiTotalSales">£0.00</div>
-          <div class="kpi-sub" id="kpiSalesGrowth">Across 12 stores</div>
+          <div class="kpi-sub" id="kpiSalesGrowth">Across selected scope</div>
         </div>
         <div class="kpi-card">
           <div class="kpi-title">Store Profit (GBP)</div>
@@ -246,17 +237,33 @@
         </div>
       </div>
 
-      <!-- Charts Row 1 -->
+      <!-- Charts Row 1 with Integrated Events Trajectory -->
       <div class="charts-grid-2">
-        <div class="dashboard-card">
+        <div class="dashboard-card" style="grid-column: 1 / -1;">
           <div class="card-header-flex">
-            <h3><span>📈</span> Monthly Sales & Profit Trajectory</h3>
-            <span style="font-size: 0.75rem; color: var(--text-muted);">GBP (£)</span>
+            <h3><span>📈</span> Monthly Sales & Profit Trajectory with Integrated Event Markers</h3>
+            <span style="font-size: 0.75rem; color: var(--text-muted);" id="trajectoryScopeLabel">Scope: Chain-Wide (All Stores)</span>
           </div>
-          <div class="chart-wrapper">
+          <div class="chart-wrapper" style="height: 290px;">
             <canvas class="chart-canvas" id="chartMonthlyTrends"></canvas>
           </div>
+
+          <!-- Event Trajectory Impact Tracker (Directly under chart) -->
+          <div class="event-tracker-panel" id="eventTrackerPanel">
+            <div class="event-tracker-header">
+              <h4 style="font-size: 0.85rem; font-weight: 700; display: flex; align-items: center; gap: 0.4rem;">
+                <span>⚡</span> Event Profit Impact Tracker <span id="eventTrackerScopeBadge" class="badge-tag info">All Stores</span>
+              </h4>
+              <span style="font-size: 0.75rem; color: var(--text-muted);">Displays profit increases/decreases across each business event</span>
+            </div>
+            <div class="event-tracker-grid" id="eventTrackerCardsContainer">
+              <!-- Rendered via JS -->
+            </div>
+          </div>
         </div>
+      </div>
+
+      <div class="charts-grid-2">
         <div class="dashboard-card">
           <div class="card-header-flex">
             <h3><span>🍩</span> Total Cost Breakdown</h3>
@@ -266,13 +273,22 @@
             <canvas class="chart-canvas" id="chartCostBreakdown"></canvas>
           </div>
         </div>
+        <div class="dashboard-card">
+          <div class="card-header-flex">
+            <h3><span>📱</span> Sales Channel Revenue Contribution</h3>
+            <span style="font-size: 0.75rem; color: var(--text-muted);">Channel Mix</span>
+          </div>
+          <div class="chart-wrapper">
+            <canvas class="chart-canvas" id="chartChannelSplit"></canvas>
+          </div>
+        </div>
       </div>
 
-      <!-- Store Performance League Table -->
+      <!-- Store Performance League Table with Sentiment & Star Rating Sorting -->
       <div class="dashboard-card">
         <div class="card-header-flex">
           <h2><span>🏆</span> Store Performance League Table</h2>
-          <span style="font-size: 0.75rem; color: var(--text-muted);">Click any header to sort</span>
+          <span style="font-size: 0.75rem; color: var(--text-muted);">Click any header to sort by profit, margin, footfall, star rating, or sentiment score</span>
         </div>
         <div class="table-responsive">
           <table class="data-table" id="storeLeagueTable">
@@ -285,15 +301,14 @@
                 <th class="sortable" data-sort="sales" style="text-align: right;">Total Sales ⬍</th>
                 <th class="sortable" data-sort="profit" style="text-align: right;">Store Profit ⬍</th>
                 <th class="sortable" data-sort="margin" style="text-align: right;">Margin % ⬍</th>
+                <th class="sortable" data-sort="rating" style="text-align: right;">★ Rating ⬍</th>
+                <th class="sortable" data-sort="sentiment" style="text-align: right;">Sentiment ⬍</th>
                 <th class="sortable" data-sort="footfall" style="text-align: right;">Footfall ⬍</th>
                 <th class="sortable" data-sort="conversion" style="text-align: right;">Conversion ⬍</th>
                 <th class="sortable" data-sort="ticket" style="text-align: right;">Avg Ticket ⬍</th>
-                <th class="sortable" data-sort="waste" style="text-align: right;">Waste Rate ⬍</th>
               </tr>
             </thead>
-            <tbody id="storeLeagueTableBody">
-              <!-- Rendered via JS -->
-            </tbody>
+            <tbody id="storeLeagueTableBody"></tbody>
           </table>
         </div>
       </div>
@@ -312,12 +327,8 @@
           Comprehensive breakdown of revenue, direct channel costs (commissions, packaging, packing labour, food cost), and net contribution across channels.
         </p>
 
-        <!-- Channel Cards Grid -->
-        <div class="channel-grid" id="channelCardsGrid">
-          <!-- Rendered via JS -->
-        </div>
+        <div class="channel-grid" id="channelCardsGrid"></div>
 
-        <!-- Controllable Profit Drain Callout -->
         <div class="alert-callout">
           <strong>⚠️ CONTROLLABLE PROFIT DRAIN IDENTIFIED: THIRD-PARTY DELIVERY PLATFORMS</strong><br>
           <p style="margin-top: 0.4rem; line-height: 1.5;">
@@ -348,9 +359,7 @@
                 <th style="text-align: right;">Est. Net Margin %</th>
               </tr>
             </thead>
-            <tbody id="channelTableBody">
-              <!-- Rendered via JS -->
-            </tbody>
+            <tbody id="channelTableBody"></tbody>
           </table>
         </div>
       </div>
@@ -365,13 +374,21 @@
           <h2><span>⚡</span> Business Events Impact on Sales & Profitability</h2>
           <span class="badge-tag info">Event-Study Econometric Analysis</span>
         </div>
-        <p style="font-size: 0.825rem; color: var(--text-muted); margin-bottom: 1.25rem;">
-          Quantitative pre- vs post-event evaluation measuring the financial and operational impact of chain strategic events.
-        </p>
 
-        <div class="events-grid" id="eventsGrid">
-          <!-- Rendered via JS -->
+        <!-- Modularity Architecture Callout -->
+        <div class="modularity-box">
+          <h4>🧩 Architecture Modularity: How Dynamic Ingestion Works</h4>
+          <p>
+            Every section of this application is decoupled and reactive. If a user appends a new event row to <code>business_events.csv</code> (e.g. <code>Summer Menu Launch, 2026-05-01, Introduced cold brew range</code>) or drops an updated CSV into Tab 7:
+          </p>
+          <ul style="margin-left: 1.25rem; margin-top: 0.35rem; line-height: 1.5;">
+            <li><strong>Auto-Event Detection</strong>: The dynamic pipeline parses the event date, maps it to its timeline window, and calculates pre- vs post-event financial shifts automatically.</li>
+            <li><strong>Trajectory Integration</strong>: The chart renderer draws a new dashed vertical event line and flag on the Canvas timeline.</li>
+            <li><strong>Store-Specific Filtering</strong>: The engine matches store mentions in the event description (e.g. Leeds Briggate, Trinity, Sheffield) or applies it chain-wide.</li>
+          </ul>
         </div>
+
+        <div class="events-grid" id="eventsGrid"></div>
       </div>
     </section>
 
@@ -390,21 +407,31 @@
           Enriched dataset of 3,030 customer reviews categorized by store with average sentiment, star ratings, current operational positives, and actionable things to improve.
         </p>
 
+        <!-- Sentiment Sorting & Store Filtering Controls -->
         <div class="filter-bar">
           <div class="filter-group">
-            <label for="sentimentStoreFilter">Select Store:</label>
+            <label for="sentimentStoreFilter">Store:</label>
             <select class="filter-select" id="sentimentStoreFilter">
-              <option value="ALL">All Stores (Full Chain Comparison)</option>
+              <option value="ALL">All Stores (Full Chain)</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label for="sortSentimentStores">Sort Stores By:</label>
+            <select class="filter-select" id="sortSentimentStores">
+              <option value="sentiment_desc">Highest Sentiment Score (+ to -)</option>
+              <option value="sentiment_asc">Lowest Sentiment Score (- to +)</option>
+              <option value="rating_desc">Highest Star Rating (5 ★ to 1 ★)</option>
+              <option value="rating_asc">Lowest Star Rating (1 ★ to 5 ★)</option>
+              <option value="reviews_desc">Most Customer Reviews</option>
+              <option value="id_asc">Store ID (S01 to S12)</option>
             </select>
           </div>
           <div class="filter-group" style="margin-left: auto;">
-            <input type="text" class="filter-input" id="searchReviewsAdvanced" placeholder="Search feedback...">
+            <input type="text" class="filter-input" id="searchReviewsAdvanced" placeholder="Search positives / improvements...">
           </div>
         </div>
 
-        <div id="sentimentStoreCardsContainer">
-          <!-- Rendered via JS -->
-        </div>
+        <div id="sentimentStoreCardsContainer"></div>
       </div>
     </section>
 
@@ -440,9 +467,7 @@
                 <th style="text-align: right;">Est. Fitout</th>
               </tr>
             </thead>
-            <tbody id="candidateSitesTableBody">
-              <!-- Rendered via JS -->
-            </tbody>
+            <tbody id="candidateSitesTableBody"></tbody>
           </table>
         </div>
       </div>
@@ -454,14 +479,14 @@
     <section class="tab-panel" id="tab-explorer">
       <div class="dashboard-card">
         <div class="card-header-flex">
-          <h2><span>🗂️</span> Live CSV Upload & Data Explorer</h2>
+          <h2><span>🗂️</span> Live CSV Upload & Dynamic Data Explorer</h2>
         </div>
         
         <div class="dropzone" id="dropzone">
           <div class="dropzone-icon">📁</div>
-          <h3 style="font-size: 1rem; margin-bottom: 0.35rem;">Drag & Drop CSV Files to Re-Verify & Reconcile</h3>
+          <h3 style="font-size: 1rem; margin-bottom: 0.35rem;">Drag & Drop CSV Files to Dynamically Update the Dashboard</h3>
           <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.75rem;">
-            Upload any updated master or individual aspect CSV (e.g. daily sales, waste log, rota, costs) for instant in-browser auditing.
+            Upload any updated CSV (business events, sales, waste log, rota, costs, reviews) for instant reactive re-computation across all dashboard sections.
           </p>
           <input type="file" id="fileInput" multiple accept=".csv" style="display: none;">
           <button class="btn btn-primary btn-sm" onclick="document.getElementById('fileInput').click()">Select CSV Files</button>
@@ -478,6 +503,7 @@
               <option value="candidate_sites">Candidate Sites (7 rows)</option>
               <option value="promotions">Promotions (6 rows)</option>
               <option value="capex">Capex Log (4 rows)</option>
+              <option value="events">Business Events</option>
             </select>
           </div>
           <button class="btn btn-secondary btn-sm" id="btnExportActiveTable" style="margin-left: auto;">Export Table to CSV</button>
