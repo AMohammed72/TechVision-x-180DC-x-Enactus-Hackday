@@ -3,9 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Grind & Crumb - Data Verifier, Reconciliation & Executive Dashboard</title>
+  <title>Grind & Crumb — Operational Verifier, P&L & Huff Gravity Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Playfair+Display:wght@600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
-  <meta name="description" content="Ultra-optimized cross-dataset verifier, discrepancy audit reporter, multi-store comparison, channel economics, and Huff Gravity expansion dashboard.">
+  <meta name="description" content="Cross-dataset verifier, discrepancy audit reporter, multi-store comparison, channel economics, and Huff Gravity expansion dashboard.">
 </head>
 <body>
   <!-- Header -->
@@ -13,37 +16,37 @@
     <div class="brand-wrapper">
       <div class="brand-logo">GC</div>
       <div class="brand-title">
-        <h1>Grind & Crumb <span class="badge-tag" id="statusBadge">Audited & Reconciled</span></h1>
+        <h1>Grind & Crumb <span class="badge-tag success" id="statusBadge">Audited & Reconciled</span></h1>
         <div class="brand-subtitle">Data Verifier, Multi-Store Comparison, Channel Economics & Huff Gravity Expansion</div>
       </div>
     </div>
     <div class="header-controls">
-      <button class="btn btn-outline btn-sm" id="btnThemeToggle" title="Toggle Dark/Light Mode">🌓 Theme</button>
+      <span class="badge-tag" id="headerDatasetBadge">18 Source CSVs Linked</span>
     </div>
   </header>
 
   <!-- Navigation Tabs -->
   <nav class="nav-tabs" id="navTabs">
     <div class="nav-tab active" data-tab="tab-verifier">
-      🔍 Reconciliation & Errors <span class="tab-badge" id="badgeDiscrepanciesCount">87</span>
+      Reconciliation & Errors <span class="tab-badge" id="badgeDiscrepanciesCount">0</span>
     </div>
     <div class="nav-tab" data-tab="tab-dashboard">
-      📊 Executive P&L Dashboard
+      Executive P&L Dashboard
     </div>
     <div class="nav-tab" data-tab="tab-compare">
-      ⚖️ Multi-Store Comparison
+      Multi-Store Comparison
     </div>
     <div class="nav-tab" data-tab="tab-channels">
-      💰 Channel Economics & Profit Drains
+      Channel Economics & Profit Drains
     </div>
     <div class="nav-tab" data-tab="tab-sentiment">
-      ⭐ Sentiment Pipeline & Store Insights
+      Sentiment Pipeline & Store Insights
     </div>
     <div class="nav-tab" data-tab="tab-catchment">
-      📍 Catchment & Expansion Sites
+      Catchment & Expansion Sites
     </div>
     <div class="nav-tab" data-tab="tab-explorer">
-      🗂️ Data Explorer & Upload
+      Data Explorer & Upload
     </div>
   </nav>
 
@@ -58,30 +61,30 @@
         <div class="kpi-card">
           <div class="kpi-title">Data Integrity Score</div>
           <div class="kpi-value" style="color: var(--success);" id="kpiIntegrity">99.8%</div>
-          <div class="kpi-sub pos">✓ 142/142 Store-Months Validated</div>
+          <div class="kpi-sub pos" id="kpiIntegritySub">✓ Store-Months Validated</div>
         </div>
         <div class="kpi-card">
           <div class="kpi-title">Discrepancies Fixed</div>
-          <div class="kpi-value" style="color: var(--accent-primary);" id="kpiFixed">87</div>
-          <div class="kpi-sub pos">✓ Auto-Reconciled & Imputed</div>
+          <div class="kpi-value" style="color: var(--accent-primary);" id="kpiFixed">0</div>
+          <div class="kpi-sub pos" id="kpiFixedSub">✓ Auto-Reconciled & Imputed</div>
         </div>
         <div class="kpi-card">
           <div class="kpi-title">P&L Footfall Mismatch</div>
           <div class="kpi-value" style="color: var(--warning);" id="kpiFootfallDiscrepancy">1 Store</div>
-          <div class="kpi-sub neg">S09 Dec 2025: +9,040 Footfall Restored</div>
+          <div class="kpi-sub neg" id="kpiFootfallSubVerifier">Cross-checked vs footfall.csv</div>
         </div>
         <div class="kpi-card">
-          <div class="kpi-title">Waste Units Imputed</div>
-          <div class="kpi-value" style="color: var(--info);" id="kpiWasteImputed">400 Rows</div>
-          <div class="kpi-sub">Cost-to-Unit Benchmarking Applied</div>
+          <div class="kpi-title">Waste & Rota Fixes</div>
+          <div class="kpi-value" style="color: var(--accent-primary);" id="kpiWasteImputed">0 Rows</div>
+          <div class="kpi-sub" id="kpiWasteSubVerifier">Cost-to-Unit & Date Normalization</div>
         </div>
       </div>
 
       <div class="dashboard-card">
         <div class="card-header-flex">
-          <h2><span>🛡️</span> Data Discrepancy Audit Log & Resolution Engine</h2>
+          <h2>Data Discrepancy Audit Log & Auto-Fix Resolution Engine</h2>
           <div style="display: flex; gap: 0.5rem; align-items: center;">
-            <span style="font-size: 0.8rem; color: var(--text-muted);">Filter:</span>
+            <span style="font-size: 0.78rem; color: var(--text-muted);">Filter:</span>
             <select class="filter-select" id="filterDiscSeverity">
               <option value="ALL">All Severities</option>
               <option value="HIGH">High / Critical</option>
@@ -94,21 +97,22 @@
               <option value="Waste">Waste Quality</option>
               <option value="Rota">Staff Rota</option>
               <option value="Reviews">Reviews Mapping</option>
+              <option value="Validation">Validation & Schema</option>
             </select>
           </div>
         </div>
 
-        <p style="font-size: 0.825rem; color: var(--text-muted); margin-bottom: 1rem;">
-          The reconciliation engine cross-checked all 18 primary source datasets against the master P&L. Every identified anomaly has been reconciled, documented, and exported into the corrected output files below.
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.85rem;" id="verifierIntroText">
+          The reconciliation engine cross-checks all source CSV datasets against the master P&L and schema rules. Every anomaly discovered during baseline or live CSV validation is automatically fixed, documented with its affected CSV files, and reported below.
         </p>
 
-        <div style="display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1.25rem; padding: 0.85rem; background: var(--bg-primary); border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
-          <span style="font-size: 0.8rem; font-weight: 700; align-self: center; margin-right: 0.5rem;">Reconciled Files:</span>
-          <button class="btn btn-secondary btn-sm" onclick="App.downloadFile('fixed_pnl')">📄 fixed_store_monthly_pnl.csv</button>
-          <button class="btn btn-secondary btn-sm" onclick="App.downloadFile('cleaned_waste')">📄 cleaned_waste_log.csv</button>
-          <button class="btn btn-secondary btn-sm" onclick="App.downloadFile('cleaned_rota')">📄 cleaned_staff_rota_weekly.csv</button>
-          <button class="btn btn-secondary btn-sm" onclick="App.downloadFile('cleaned_reviews')">📄 cleaned_customer_reviews.csv</button>
-          <button class="btn btn-secondary btn-sm" onclick="App.downloadFile('reviews_sentiment')">📄 customer_reviews_sentiment.csv</button>
+        <div style="display: flex; flex-wrap: wrap; gap: 0.6rem; margin-bottom: 1rem; padding: 0.75rem; background: var(--bg-primary); border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+          <span style="font-size: 0.78rem; font-weight: 700; align-self: center; margin-right: 0.35rem;">Reconciled Output Files:</span>
+          <button class="btn btn-secondary btn-sm" onclick="App.downloadFile('fixed_pnl')">fixed_store_monthly_pnl.csv</button>
+          <button class="btn btn-secondary btn-sm" onclick="App.downloadFile('cleaned_waste')">cleaned_waste_log.csv</button>
+          <button class="btn btn-secondary btn-sm" onclick="App.downloadFile('cleaned_rota')">cleaned_staff_rota_weekly.csv</button>
+          <button class="btn btn-secondary btn-sm" onclick="App.downloadFile('cleaned_reviews')">cleaned_customer_reviews.csv</button>
+          <button class="btn btn-secondary btn-sm" onclick="App.downloadFile('reviews_sentiment')">customer_reviews_sentiment.csv</button>
         </div>
 
         <div class="table-responsive">
@@ -117,12 +121,13 @@
               <tr>
                 <th>Category</th>
                 <th>Severity</th>
-                <th>Target</th>
-                <th>Field</th>
+                <th>Affected CSV File(s)</th>
+                <th>Target Scope</th>
+                <th>Field / Check</th>
                 <th>Original / Malformed</th>
                 <th>Reconciled / Ground Truth</th>
                 <th>Status</th>
-                <th>Action Taken</th>
+                <th>Auto-Fix Action Taken</th>
               </tr>
             </thead>
             <tbody id="discrepancyTableBody"></tbody>
@@ -132,31 +137,10 @@
 
       <div class="dashboard-card">
         <div class="card-header-flex">
-          <h3><span>🔍</span> Deep-Dive Diff Inspector: Store S09 (Harrogate) December 2025 Footfall</h3>
-          <span class="status-badge reconciled">Reconciled in Master File</span>
+          <h3 id="diffInspectorTitle">Deep-Dive Diff Inspector</h3>
+          <span class="status-badge reconciled" id="diffInspectorStatusBadge">Reconciled in Master File</span>
         </div>
-        <div class="diff-container">
-          <div class="diff-box">
-            <h4>Original: starter_store_monthly_pnl.csv</h4>
-            <p style="font-size: 0.8rem; margin-bottom: 0.5rem;">Month: <strong>2025-12</strong> | Store: <strong>S09 (Harrogate James Street)</strong></p>
-            <div style="font-size: 0.825rem; font-family: monospace; background: var(--bg-secondary); padding: 0.65rem; border-radius: 4px;">
-              door_count: <span class="diff-val-highlight diff-old">21,721</span> (Erroneous undercount)<br>
-              total_receipts: 10,091<br>
-              implied conversion rate: 46.4% (Artificially skewed)<br>
-              source: starter_store_monthly_pnl.csv row 68
-            </div>
-          </div>
-          <div class="diff-box">
-            <h4>Ground Truth Reconciled: footfall.csv Granular Log</h4>
-            <p style="font-size: 0.8rem; margin-bottom: 0.5rem;">Month: <strong>2025-12</strong> | Store: <strong>S09 (Harrogate James Street)</strong></p>
-            <div style="font-size: 0.825rem; font-family: monospace; background: var(--bg-secondary); padding: 0.65rem; border-radius: 4px;">
-              door_count: <span class="diff-val-highlight diff-new">30,761</span> (Actual recorded footfall)<br>
-              total_receipts: 10,091<br>
-              true conversion rate: 32.8% (Accurate footfall capture)<br>
-              reconciliation: Fixed in fixed_store_monthly_pnl.csv
-            </div>
-          </div>
-        </div>
+        <div class="diff-container" id="diffInspectorContainer"></div>
       </div>
     </section>
 
@@ -232,8 +216,8 @@
       <div class="charts-grid-2">
         <div class="dashboard-card" style="grid-column: 1 / -1;">
           <div class="card-header-flex">
-            <h3><span>📈</span> Monthly Sales & Profit Trajectory with Integrated Event Markers</h3>
-            <span style="font-size: 0.75rem; color: var(--text-muted);" id="trajectoryScopeLabel">Scope: Chain-Wide (All Stores)</span>
+            <h3>Monthly Sales & Profit Trajectory with Integrated Event Markers</h3>
+            <span style="font-size: 0.75rem; color: var(--text-muted);" id="trajectoryScopeLabel">Scope: Chain-Wide (All Stores) · Hover points for exact figures</span>
           </div>
           <div class="chart-wrapper" style="height: 290px;">
             <canvas class="chart-canvas" id="chartMonthlyTrends"></canvas>
@@ -241,10 +225,10 @@
 
           <div class="event-tracker-panel" id="eventTrackerPanel">
             <div class="event-tracker-header">
-              <h4 style="font-size: 0.85rem; font-weight: 700; display: flex; align-items: center; gap: 0.4rem;">
-                <span>⚡</span> Event Profit Impact Tracker <span id="eventTrackerScopeBadge" class="badge-tag info">All Stores</span>
+              <h4 style="font-size: 0.9rem; font-weight: 700; display: flex; align-items: center; gap: 0.4rem;">
+                Event Profit Impact Tracker <span id="eventTrackerScopeBadge" class="badge-tag info">All Stores</span>
               </h4>
-              <span style="font-size: 0.75rem; color: var(--text-muted);">Displays profit increases/decreases across each business event</span>
+              <span style="font-size: 0.75rem; color: var(--text-muted);">Calculated dynamically from active P&L & business_events.csv</span>
             </div>
             <div class="event-tracker-grid" id="eventTrackerCardsContainer"></div>
           </div>
@@ -254,8 +238,8 @@
       <div class="charts-grid-2">
         <div class="dashboard-card">
           <div class="card-header-flex">
-            <h3><span>🍩</span> Total Cost Breakdown</h3>
-            <span style="font-size: 0.75rem; color: var(--text-muted);">Major Cost Centers</span>
+            <h3>Total Cost Breakdown</h3>
+            <span style="font-size: 0.75rem; color: var(--text-muted);">Hover slices for exact GBP & share</span>
           </div>
           <div class="chart-wrapper">
             <canvas class="chart-canvas" id="chartCostBreakdown"></canvas>
@@ -263,7 +247,7 @@
         </div>
         <div class="dashboard-card">
           <div class="card-header-flex">
-            <h3><span>📱</span> Sales Channel Revenue Contribution</h3>
+            <h3>Sales Channel Revenue Contribution</h3>
             <span style="font-size: 0.75rem; color: var(--text-muted);">In-Store vs. App Click & Collect vs. Delivery Mix</span>
           </div>
           <div class="chart-wrapper">
@@ -275,7 +259,7 @@
       <!-- Store Performance League Table -->
       <div class="dashboard-card">
         <div class="card-header-flex">
-          <h2><span>🏆</span> Store Performance League Table</h2>
+          <h2>Store Performance League Table</h2>
           <span style="font-size: 0.75rem; color: var(--text-muted);">Click any header to sort by profit, margin, star rating, or sentiment score</span>
         </div>
         <div class="table-responsive">
@@ -308,22 +292,22 @@
     <section class="tab-panel" id="tab-compare">
       <div class="dashboard-card">
         <div class="card-header-flex">
-          <h2><span>⚖️</span> Multi-Store Profit / Loss Comparison Engine</h2>
+          <h2>Multi-Store Profit / Loss Comparison Engine</h2>
           <span class="badge-tag info">Compare 2 or More Stores</span>
         </div>
-        <p style="font-size: 0.825rem; color: var(--text-muted); margin-bottom: 1rem;">
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.85rem;">
           Select two or more stores below to compare their revenue, cost structures, and monthly profit/loss trajectory side-by-side at any given time.
         </p>
 
         <!-- Quick Comparison Presets -->
-        <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-bottom: 0.85rem;">
-          <span style="font-size: 0.775rem; color: var(--text-muted); font-weight: 700;">Quick Presets:</span>
+        <div style="display: flex; flex-wrap: wrap; gap: 0.45rem; align-items: center; margin-bottom: 0.75rem;">
+          <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 700;">Quick Presets:</span>
           <button class="btn btn-outline btn-sm" onclick="App.applyComparePreset('leeds')">Leeds: S03 vs S12</button>
           <button class="btn btn-outline btn-sm" onclick="App.applyComparePreset('manchester')">Manchester: S05 vs S06 vs S07</button>
           <button class="btn btn-outline btn-sm" onclick="App.applyComparePreset('sheffield')">Sheffield: S01 vs S02 vs S11</button>
           <button class="btn btn-outline btn-sm" onclick="App.applyComparePreset('top_profit')">Top 3 Profit Leaders</button>
-          <button class="btn btn-secondary btn-sm" onclick="App.applyComparePreset('select_all')">Select All (12)</button>
-          <button class="btn btn-outline btn-sm" onclick="App.applyComparePreset('clear')">Clear Selection</button>
+          <button class="btn btn-secondary btn-sm" onclick="App.applyComparePreset('select_all')">Select All</button>
+          <button class="btn btn-outline btn-sm" onclick="App.applyComparePreset('clear')">Reset Selection</button>
         </div>
 
         <!-- Store Selection Chips -->
@@ -358,19 +342,19 @@
               <option value="footfall">Footfall Door Count</option>
             </select>
           </div>
-          <span style="font-size: 0.8rem; color: var(--text-muted); margin-left: auto;" id="compareSelectionCounter">
+          <span style="font-size: 0.78rem; color: var(--text-muted); margin-left: auto;" id="compareSelectionCounter">
             Selected: 2 stores
           </span>
         </div>
 
         <!-- Comparative Multi-Store Timeline Chart -->
-        <div class="dashboard-card" style="background: var(--bg-primary); border-color: var(--border-color); margin-bottom: 1.25rem;">
+        <div class="dashboard-card" style="background: var(--bg-primary); border-color: var(--border-color); margin-bottom: 1rem;">
           <div class="card-header-flex">
-            <h3><span>📈</span> Side-by-Side Profit / Loss Timeline</h3>
-            <span style="font-size: 0.75rem; color: var(--text-muted);" id="compareChartMetricLabel">Metric: Store Profit / Loss (£)</span>
+            <h3>Side-by-Side Profit / Loss Timeline</h3>
+            <span style="font-size: 0.75rem; color: var(--text-muted);" id="compareChartMetricLabel">Metric: Store Profit / Loss (£) · Hover for exact values</span>
           </div>
-          <div id="compareChartLegend" style="display: flex; flex-wrap: wrap; gap: 0.65rem; align-items: center; margin-bottom: 0.75rem; font-size: 0.775rem;"></div>
-          <div class="chart-wrapper" style="height: 310px;">
+          <div id="compareChartLegend" style="display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-bottom: 0.65rem; font-size: 0.75rem;"></div>
+          <div class="chart-wrapper" style="height: 300px;">
             <canvas class="chart-canvas" id="chartMultiStoreCompare"></canvas>
           </div>
         </div>
@@ -379,7 +363,7 @@
         <div class="compare-grid" id="compareCardsGrid"></div>
 
         <!-- Side-by-Side Detailed Breakdown Table -->
-        <h3 style="font-size: 0.95rem; font-weight: 700; margin: 1.5rem 0 0.75rem 0;">
+        <h3 style="margin: 1.25rem 0 0.65rem 0;">
           Detailed Financial Comparison Table (<span id="compareTableTimeLabel">Full Year</span>)
         </h3>
         <div class="table-responsive">
@@ -399,29 +383,18 @@
     <section class="tab-panel" id="tab-channels">
       <div class="dashboard-card">
         <div class="card-header-flex">
-          <h2><span>💰</span> Profit - Cost Comparison by Sales Channel</h2>
+          <h2>Profit - Cost Comparison by Sales Channel</h2>
           <span class="badge-tag danger">Channel Profitability Audit</span>
         </div>
-        <p style="font-size: 0.825rem; color: var(--text-muted); margin-bottom: 1.25rem;">
-          Comprehensive breakdown of revenue, direct channel costs (commissions, packaging, packing labour, food cost), and net contribution across channels.
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
+          Dynamic breakdown of revenue, direct channel costs (commissions, packaging, packing labour, food cost), and net contribution across channels calculated directly from active P&L data.
         </p>
 
         <div class="channel-grid" id="channelCardsGrid"></div>
 
-        <div class="alert-callout">
-          <strong>⚠️ CONTROLLABLE PROFIT DRAIN IDENTIFIED: THIRD-PARTY DELIVERY PLATFORMS</strong><br>
-          <p style="margin-top: 0.4rem; line-height: 1.5;">
-            While delivery generates <strong>£1.53M in sales (18.4% of total)</strong>, it accounts for <strong>£453.6K in commission fees</strong>, <strong>£47.6K in packaging</strong>, and <strong>£98.8K in staff packing time (~4 min/order)</strong>.
-            This crushes delivery's gross contribution margin to <strong>31.7%</strong> (vs <strong>72.5%</strong> for In-Store and App Click & Collect) and yields a net negative margin of <strong>-2.8%</strong> after store overhead allocation.
-          </p>
-          <div style="margin-top: 0.65rem; display: flex; flex-wrap: wrap; gap: 0.5rem;">
-            <span class="badge-tag danger">Controllable Action 1: Enforce £12+ minimum basket size on Dashly & RushEats</span>
-            <span class="badge-tag warning">Controllable Action 2: Pass £0.50 packaging fee to delivery customers</span>
-            <span class="badge-tag info">Controllable Action 3: Migrate delivery customers to App Click & Collect (0% commission)</span>
-          </div>
-        </div>
+        <div class="alert-callout" id="channelDrainCallout"></div>
 
-        <div class="table-responsive" style="margin-top: 1.5rem;">
+        <div class="table-responsive" style="margin-top: 1.25rem;">
           <table class="data-table">
             <thead>
               <tr>
@@ -429,7 +402,7 @@
                 <th style="text-align: right;">Total Sales</th>
                 <th style="text-align: right;">Total Orders</th>
                 <th style="text-align: right;">Avg Ticket</th>
-                <th style="text-align: right;">Food Cost (27.5%)</th>
+                <th style="text-align: right;">Food Cost (COGS)</th>
                 <th style="text-align: right;">Platform Commission</th>
                 <th style="text-align: right;">Packaging Cost</th>
                 <th style="text-align: right;">Packing Labour</th>
@@ -450,13 +423,11 @@
     <section class="tab-panel" id="tab-sentiment">
       <div class="dashboard-card">
         <div class="card-header-flex">
-          <h2><span>⭐</span> Customer Review Sentiment Pipeline & Store Insights</h2>
-          <span class="badge-tag" style="background: rgba(16,185,129,0.1); color: var(--success); border-color: var(--success);">
-            Powered by review_sentiment_pipeline.py
-          </span>
+          <h2>Customer Review Sentiment Pipeline & Store Insights</h2>
+          <span class="badge-tag success">Powered by review_sentiment_pipeline.py</span>
         </div>
-        <p style="font-size: 0.825rem; color: var(--text-muted); margin-bottom: 1rem;">
-          Enriched dataset of 3,030 customer reviews categorized by store with average sentiment, star ratings, current operational positives, and actionable things to improve.
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.85rem;" id="sentimentSubtitleText">
+          Enriched customer reviews categorized by store with average sentiment, star ratings, current operational positives, and actionable areas to improve.
         </p>
 
         <div class="filter-bar">
@@ -494,85 +465,85 @@
       <div class="kpi-grid">
         <div class="kpi-card">
           <div class="kpi-title">Top Expansion Opportunity</div>
-          <div class="kpi-value" style="color: var(--success);" id="kpiTopExpansionSite">CS1 · Headingley</div>
-          <div class="kpi-sub pos" id="kpiTopExpansionSub">+£10,656/mo Net Chain Profit</div>
+          <div class="kpi-value" style="color: var(--success);" id="kpiTopExpansionSite">—</div>
+          <div class="kpi-sub pos" id="kpiTopExpansionSub">—</div>
         </div>
         <div class="kpi-card">
           <div class="kpi-title">Viable Sites Net Profit Uplift</div>
-          <div class="kpi-value" style="color: var(--accent-primary);" id="kpiTotalViableProfit">+£24,043/mo</div>
-          <div class="kpi-sub pos" id="kpiTotalViableSub">4 Net-Positive Sites (+£288.5K/yr)</div>
+          <div class="kpi-value" style="color: var(--accent-primary);" id="kpiTotalViableProfit">—</div>
+          <div class="kpi-sub pos" id="kpiTotalViableSub">—</div>
         </div>
         <div class="kpi-card">
-          <div class="kpi-title">Cannibalization Trap Alert</div>
-          <div class="kpi-value" style="color: var(--danger);" id="kpiWorstCannibSite">CS7 · Wellington Pl</div>
-          <div class="kpi-sub neg" id="kpiWorstCannibSub">-£5,301/mo Cannibalized from S12 & S03</div>
+          <div class="kpi-title">Highest Cannibalization Risk</div>
+          <div class="kpi-value" style="color: var(--danger);" id="kpiWorstCannibSite">—</div>
+          <div class="kpi-sub neg" id="kpiWorstCannibSub">—</div>
         </div>
         <div class="kpi-card">
           <div class="kpi-title">Empirical Gravity Calibration</div>
-          <div class="kpi-value" style="color: var(--warning);">S12 ➔ S03 (0.4 mi)</div>
-          <div class="kpi-sub">Observed -18.8% Sales / -£6.8K/mo Profit</div>
+          <div class="kpi-value" style="color: var(--warning);" id="kpiGravityCalibVal">—</div>
+          <div class="kpi-sub" id="kpiGravityCalibSub">—</div>
         </div>
       </div>
 
       <div class="dashboard-card">
         <div class="card-header-flex">
-          <h2><span>📍</span> Candidate Expansion Profit Estimator & Huff Gravity Cannibalization Engine</h2>
+          <h2>Candidate Expansion Profit Estimator & Huff Gravity Cannibalization Engine</h2>
           <span class="badge-tag info">Huff Spatial Gravity Model: P_ij = (A_j / d_ij^λ) / Σ(A_k / d_ik^λ)</span>
         </div>
-        <p style="font-size: 0.825rem; color: var(--text-muted); margin-bottom: 1rem;">
-          Estimates potential monthly customer amounts and average customer spending for candidate expansion sites (<code>CS1</code>–<code>CS7</code>) calibrated on existing stores (<code>S01</code>–<code>S12</code>), and applies a spatial <strong>Huff Gravity Model</strong> to quantify profit cannibalization on existing locations.
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.85rem;">
+          Estimates potential monthly customer amounts and average customer spending for candidate expansion sites calibrated on existing stores, and applies a spatial <strong>Huff Gravity Model</strong> to quantify profit cannibalization on existing locations.
         </p>
 
         <!-- Interactive Huff Gravity Parameter Controls -->
-        <div class="filter-bar" style="gap: 1.25rem;">
+        <div class="filter-bar" style="gap: 1rem;">
           <div class="filter-group">
             <label for="huffLambdaSlider" title="Higher λ means gravity decays faster with distance">
               Distance Decay (λ): <strong id="huffLambdaVal" style="color: var(--accent-primary);">2.0</strong>
             </label>
-            <input type="range" id="huffLambdaSlider" min="1.0" max="3.5" step="0.1" value="2.0" style="width: 110px; accent-color: var(--accent-primary);">
+            <input type="range" id="huffLambdaSlider" min="1.0" max="3.5" step="0.1" value="2.0" style="width: 105px; accent-color: var(--accent-primary);">
           </div>
           <div class="filter-group">
             <label for="huffAlphaSlider" title="Sensitivity of store attractiveness to square footage">
               Size Attractiveness (α): <strong id="huffAlphaVal" style="color: var(--accent-primary);">0.85</strong>
             </label>
-            <input type="range" id="huffAlphaSlider" min="0.50" max="1.30" step="0.05" value="0.85" style="width: 110px; accent-color: var(--accent-primary);">
+            <input type="range" id="huffAlphaSlider" min="0.50" max="1.30" step="0.05" value="0.85" style="width: 105px; accent-color: var(--accent-primary);">
           </div>
           <div class="filter-group">
             <label for="huffSpendSlider" title="Scenario sensitivity on customer spending / avg ticket">
               Customer Spend Sensitivity: <strong id="huffSpendVal" style="color: var(--accent-primary);">100%</strong>
             </label>
-            <input type="range" id="huffSpendSlider" min="0.85" max="1.15" step="0.01" value="1.00" style="width: 110px; accent-color: var(--accent-primary);">
+            <input type="range" id="huffSpendSlider" min="0.85" max="1.15" step="0.01" value="1.00" style="width: 105px; accent-color: var(--accent-primary);">
           </div>
           <div class="filter-group">
-            <label for="huffCityFilter">City Filter:</label>
+            <label for="huffCityFilter">Table Filter:</label>
             <select class="filter-select" id="huffCityFilter">
-              <option value="ALL">All Candidate Cities (7 Sites)</option>
-              <option value="Leeds">Leeds (CS1, CS7 vs S03, S12)</option>
-              <option value="Sheffield">Sheffield (CS2 vs S01, S02, S11)</option>
-              <option value="Manchester">Manchester (CS3 vs S05, S06, S07)</option>
-              <option value="York">York (CS4 vs S04)</option>
-              <option value="Liverpool">Liverpool (CS5 - Greenfield)</option>
-              <option value="Wakefield">Wakefield (CS6 - Greenfield)</option>
+              <option value="ALL">All Candidate Cities</option>
             </select>
           </div>
           <button class="btn btn-outline btn-sm" id="btnResetHuffModel" style="margin-left: auto;">Reset Model Defaults</button>
         </div>
 
-        <!-- Visual Charts: Profit vs Cannibalization Bar Chart + Spatial Huff Network -->
+        <!-- Visual Charts: Profit vs Cannibalization Bar Chart + Single-City Spatial Huff Network -->
         <div class="charts-grid-2">
           <div class="dashboard-card" style="background: var(--bg-primary); margin-bottom: 0;">
             <div class="card-header-flex">
-              <h3><span>📊</span> Standalone Profit vs. Cannibalization Loss vs. Net Chain Profit</h3>
-              <span style="font-size: 0.725rem; color: var(--text-muted);">GBP / Month</span>
+              <h3>Standalone Profit vs. Cannibalization Loss vs. Net Chain Profit</h3>
+              <span style="font-size: 0.725rem; color: var(--text-muted);">GBP / Month · Hover bars for details</span>
             </div>
             <div class="chart-wrapper" style="height: 300px;">
               <canvas class="chart-canvas" id="chartExpansionProfits"></canvas>
             </div>
           </div>
           <div class="dashboard-card" style="background: var(--bg-primary); margin-bottom: 0;">
-            <div class="card-header-flex">
-              <h3><span>🧭</span> Spatial Huff Gravity & Cannibalization Network</h3>
-              <span style="font-size: 0.725rem; color: var(--text-muted);">Existing Stores vs. Candidate Sites</span>
+            <div class="card-header-flex" style="flex-wrap: wrap; gap: 0.5rem;">
+              <div>
+                <h3>Spatial Huff Gravity & Cannibalization Network</h3>
+                <div style="font-size: 0.725rem; color: var(--text-muted);">Single-city view · Hover lines or nodes for gravity metrics</div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 0.4rem;">
+                <label for="huffNetworkCitySelect" style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted);">City:</label>
+                <select class="filter-select" id="huffNetworkCitySelect"></select>
+              </div>
             </div>
             <div class="chart-wrapper" style="height: 300px;">
               <canvas class="chart-canvas" id="chartHuffGravityMap"></canvas>
@@ -580,16 +551,11 @@
           </div>
         </div>
 
-        <!-- Strategic Callout Box -->
-        <div class="alert-callout" style="margin-top: 1.25rem; margin-bottom: 1.25rem; border-left-color: var(--warning); background: rgba(245, 158, 11, 0.08);">
-          <strong style="color: var(--warning);">💡 HUFF GRAVITY STRATEGIC INSIGHT: WHY LEEDS WELLINGTON PLACE (CS7) IS A CANNIBALIZATION TRAP</strong>
-          <p style="margin-top: 0.35rem; line-height: 1.5;">
-            In stakeholder interviews, leadership noted looking at <strong>Leeds Wellington Place (CS7)</strong> and <strong>Sheffield Kelham Island (CS2)</strong>. While CS7 generates an estimated <strong>Standalone Profit of <span id="calloutCs7Standalone">£4,137/mo</span></strong> (8,947 customers/mo @ £6.43 avg spend), it sits just <strong>0.42 miles from S12 (Leeds Trinity)</strong> and <strong>0.52 miles from S03 (Leeds Briggate)</strong>. The Huff Gravity Model shows CS7 diverts <strong><span id="calloutCs7CannibLoss">-£5,301/mo</span> in profit</strong> from S12 and S03, yielding a <strong>Net Chain Impact of <span id="calloutCs7Net">-£1,165/mo</span></strong>! Conversely, <strong>CS1 (Leeds Headingley, 2.5 mi away)</strong>, <strong>CS5 (Liverpool Bold Street, Greenfield)</strong>, and <strong>CS2 (Sheffield Kelham Island, 1.25 mi away)</strong> deliver strong net-positive chain profit.
-          </p>
-        </div>
+        <!-- Dynamically Regenerated Strategic Callout Box -->
+        <div class="alert-callout warning-callout" id="huffStrategicCallout" style="margin-top: 1rem; margin-bottom: 1rem;"></div>
 
         <!-- Candidate Sites Profit & Cannibalization Table -->
-        <h3 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 0.75rem;">
+        <h3 style="margin-bottom: 0.65rem;">
           Candidate Expansion Sites — Estimated Customer Spend, Standalone P&L & Huff Cannibalization Matrix
         </h3>
         <div class="table-responsive">
@@ -621,7 +587,7 @@
       <!-- Pairwise Huff Gravity Cannibalization Cards -->
       <div class="dashboard-card">
         <div class="card-header-flex">
-          <h3><span>🧲</span> Pairwise Huff Gravity Cannibalization Breakdown by Candidate Site</h3>
+          <h3>Pairwise Huff Gravity Cannibalization Breakdown by Candidate Site</h3>
           <span class="badge-tag warning">Distance Decay & Utility Diversion Analysis</span>
         </div>
         <div class="compare-grid" id="huffCannibalizationCardsGrid"></div>
@@ -630,8 +596,8 @@
       <!-- Existing Stores Customer Spending & Catchment Conversion Reference Table -->
       <div class="dashboard-card">
         <div class="card-header-flex">
-          <h3><span>🏪</span> Existing Store Catchment & Customer Spending Benchmarks (Model Calibration Reference)</h3>
-          <span style="font-size: 0.75rem; color: var(--text-muted);">Baseline customer amounts, spend per receipt, and catchment metrics across S01–S12</span>
+          <h3>Existing Store Catchment & Customer Spending Benchmarks (Model Calibration Reference)</h3>
+          <span style="font-size: 0.75rem; color: var(--text-muted);">Baseline customer amounts, spend per receipt, and catchment metrics across active stores</span>
         </div>
         <div class="table-responsive">
           <table class="data-table">
@@ -666,90 +632,95 @@
     <section class="tab-panel" id="tab-explorer">
       <div class="dashboard-card">
         <div class="card-header-flex">
-          <h2><span>🗂️</span> Live CSV Upload, Automated Schema Validator & Dynamic Data Explorer</h2>
+          <h2>Live CSV Upload, Automated Schema Validator & Dynamic Data Explorer</h2>
           <span class="badge-tag info">Powered by validate_grind_crumb.py</span>
         </div>
         
         <div class="dropzone" id="dropzone">
           <div class="dropzone-icon">📁</div>
-          <h3 style="font-size: 1rem; margin-bottom: 0.35rem;">Drag & Drop CSV Files to Validate & Dynamically Update the Dashboard</h3>
+          <h3 style="margin-bottom: 0.3rem;">Drag & Drop CSV Files to Validate, Auto-Fix & Dynamically Regenerate Dashboard</h3>
           <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.75rem;">
-            Every uploaded CSV (candidate sites, catchment, P&L, business events, sales, waste log, rota, reviews) is automatically validated through the <code>validate_grind_crumb.py</code> test suite before ingestion.
+            Every uploaded CSV (candidate sites, catchment, P&L, business events, sales, waste log, rota, reviews) is validated through <code>validate_grind_crumb.py</code>. Any discovered errors are automatically fixed and logged to the Reconciliation & Errors dashboard.
           </p>
           <input type="file" id="fileInput" multiple accept=".csv" style="display: none;">
-          <div style="display: flex; justify-content: center; gap: 0.75rem; flex-wrap: wrap;">
+          <div style="display: flex; justify-content: center; gap: 0.65rem; flex-wrap: wrap;">
             <button class="btn btn-primary btn-sm" onclick="document.getElementById('fileInput').click()">Select CSV Files to Upload & Validate</button>
-            <button class="btn btn-secondary btn-sm" id="btnRunBaselineValidation">🛡️ Run Full Dataset Audit (validate_grind_crumb.py)</button>
+            <button class="btn btn-secondary btn-sm" id="btnRunBaselineValidation">Run Full Dataset Audit (validate_grind_crumb.py)</button>
           </div>
         </div>
 
         <!-- CSV Validation Suite Report Panel -->
-        <div class="dashboard-card" id="validationReportPanel" style="background: var(--bg-primary); border-color: var(--border-color); margin-bottom: 1.25rem;">
+        <div class="dashboard-card" id="validationReportPanel" style="background: var(--bg-primary); border-color: var(--border-color); margin-bottom: 1rem;">
           <div class="card-header-flex" style="flex-wrap: wrap;">
-            <div style="display: flex; align-items: center; gap: 0.65rem;">
-              <h3 id="valReportTitle"><span>🧪</span> CSV Validation Engine Report</h3>
+            <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">
+              <h3 id="valReportTitle">CSV Validation Engine Report</h3>
               <span class="badge-tag" id="valOverallBadge">READY</span>
               <span style="font-size: 0.75rem; color: var(--text-muted);" id="valTargetSubtitle">Target: Baseline Dataset Pack</span>
             </div>
             <div style="display: flex; gap: 0.5rem; align-items: center;">
               <select class="filter-select" id="valStatusFilter">
                 <option value="ALL">All Checks</option>
-                <option value="FAIL">Failed Checks Only</option>
+                <option value="FAIL">Failed / Fixed Checks Only</option>
                 <option value="WARN">Warnings Only</option>
                 <option value="PASS">Passed Checks Only</option>
               </select>
-              <button class="btn btn-outline btn-sm" id="btnDownloadValidationJson">📥 Export Validation JSON</button>
+              <button class="btn btn-outline btn-sm" id="btnDownloadValidationJson">Export Validation JSON</button>
             </div>
           </div>
 
           <!-- Validation Summary Metrics Strip -->
-          <div class="kpi-grid" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); margin-bottom: 1rem;">
-            <div class="kpi-card" style="padding: 0.75rem;">
+          <div class="kpi-grid" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); margin-bottom: 0.85rem;">
+            <div class="kpi-card">
               <div class="kpi-title">Validation Status</div>
-              <div class="kpi-value" style="font-size: 1.25rem;" id="valKpiStatus">PASS</div>
+              <div class="kpi-value" style="font-size: 1.2rem;" id="valKpiStatus">PASS</div>
               <div class="kpi-sub" id="valKpiSchema">22 Schemas Active</div>
             </div>
-            <div class="kpi-card" style="padding: 0.75rem;">
+            <div class="kpi-card">
               <div class="kpi-title">Total Checks Run</div>
-              <div class="kpi-value" style="font-size: 1.25rem;" id="valKpiTotal">0</div>
+              <div class="kpi-value" style="font-size: 1.2rem;" id="valKpiTotal">0</div>
               <div class="kpi-sub" id="valKpiDuration">0.0 ms</div>
             </div>
-            <div class="kpi-card" style="padding: 0.75rem;">
+            <div class="kpi-card">
               <div class="kpi-title">Passed Checks</div>
-              <div class="kpi-value" style="font-size: 1.25rem; color: var(--success);" id="valKpiPassed">0</div>
+              <div class="kpi-value" style="font-size: 1.2rem; color: var(--success);" id="valKpiPassed">0</div>
               <div class="kpi-sub pos" id="valKpiPassRate">100% Pass Rate</div>
             </div>
-            <div class="kpi-card" style="padding: 0.75rem;">
+            <div class="kpi-card">
               <div class="kpi-title">Warnings (WARN)</div>
-              <div class="kpi-value" style="font-size: 1.25rem; color: var(--warning);" id="valKpiWarn">0</div>
-              <div class="kpi-sub">Non-blocking anomalies</div>
+              <div class="kpi-value" style="font-size: 1.2rem; color: var(--warning);" id="valKpiWarn">0</div>
+              <div class="kpi-sub">Auto-normalized</div>
             </div>
-            <div class="kpi-card" style="padding: 0.75rem;">
-              <div class="kpi-title">Defects (FAIL)</div>
-              <div class="kpi-value" style="font-size: 1.25rem; color: var(--danger);" id="valKpiFail">0</div>
-              <div class="kpi-sub">Schema / Integrity errors</div>
+            <div class="kpi-card">
+              <div class="kpi-title">Defects Found & Fixed</div>
+              <div class="kpi-value" style="font-size: 1.2rem; color: var(--danger);" id="valKpiFail">0</div>
+              <div class="kpi-sub" id="valKpiFailSub">Logged to Reconciliation</div>
             </div>
           </div>
+
+          <!-- Affected CSV Files Summary Strip -->
+          <div id="valAffectedFilesSummary" style="margin-bottom: 0.85rem; padding: 0.6rem 0.85rem; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-sm); font-size: 0.78rem;"></div>
 
           <!-- Upload Action Banner (Shown when a file is uploaded) -->
-          <div id="valUploadActionBanner" style="display: none; margin-bottom: 1rem; padding: 0.85rem 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-secondary); align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;">
-            <div id="valUploadBannerText" style="font-size: 0.825rem;"></div>
+          <div id="valUploadActionBanner" style="display: none; margin-bottom: 0.85rem; padding: 0.75rem 0.9rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-secondary); align-items: center; justify-content: space-between; gap: 0.85rem; flex-wrap: wrap;">
+            <div id="valUploadBannerText" style="font-size: 0.82rem;"></div>
             <div style="display: flex; gap: 0.5rem;">
-              <button class="btn btn-success btn-sm" id="btnConfirmIngestUpload">✓ Apply & Ingest into Dashboard</button>
-              <button class="btn btn-outline btn-sm" id="btnDismissUpload">✗ Reject Upload</button>
+              <button class="btn btn-success btn-sm" id="btnConfirmIngestUpload">✓ Apply Reconciled Data to Dashboard</button>
+              <button class="btn btn-outline btn-sm" id="btnDismissUpload">Dismiss Banner</button>
             </div>
           </div>
 
-          <div class="table-responsive" style="max-height: 290px; overflow-y: auto;">
-            <table class="data-table">
+          <div class="table-responsive">
+            <table class="data-table" id="validationResultsTable">
               <thead>
                 <tr>
                   <th>Status</th>
                   <th>Test ID</th>
                   <th>Category</th>
+                  <th>Affected CSV File(s)</th>
                   <th>Test Name</th>
                   <th>Diagnostic Message</th>
                   <th style="text-align: right;">Affected Count</th>
+                  <th>Auto-Fix / Resolution</th>
                   <th>Sample Records / Details</th>
                 </tr>
               </thead>
@@ -762,20 +733,20 @@
           <div class="filter-group">
             <label for="selectDataset">Active Dataset:</label>
             <select class="filter-select" id="selectDataset">
-              <option value="fixed_pnl">Fixed Master P&L (142 rows)</option>
-              <option value="original_pnl">Original Master P&L (142 rows)</option>
-              <option value="stores">Stores (12 rows)</option>
-              <option value="catchment">Catchment Demographics (12 rows)</option>
-              <option value="candidate_sites">Candidate Sites (7 rows)</option>
-              <option value="promotions">Promotions (6 rows)</option>
-              <option value="capex">Capex Log (4 rows)</option>
+              <option value="fixed_pnl">Fixed Master P&L</option>
+              <option value="original_pnl">Original Master P&L</option>
+              <option value="stores">Stores</option>
+              <option value="catchment">Catchment Demographics</option>
+              <option value="candidate_sites">Candidate Sites</option>
+              <option value="promotions">Promotions</option>
+              <option value="capex">Capex Log</option>
               <option value="events">Business Events</option>
             </select>
           </div>
           <button class="btn btn-secondary btn-sm" id="btnExportActiveTable" style="margin-left: auto;">Export Table to CSV</button>
         </div>
 
-        <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
+        <div class="table-responsive">
           <table class="data-table" id="explorerTable">
             <thead id="explorerTableHead"></thead>
             <tbody id="explorerTableBody"></tbody>
@@ -785,6 +756,9 @@
     </section>
 
   </main>
+
+  <!-- Global Floating Interactive Chart Tooltip -->
+  <div id="chartTooltip" class="chart-tooltip"></div>
 
   <script src="dashboard_data.js"></script>
   <script src="app.js"></script>

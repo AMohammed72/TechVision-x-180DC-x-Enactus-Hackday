@@ -422,6 +422,31 @@ def run():
     json_str = content.split("window.DASHBOARD_DATA = ")[1].rstrip(";\n ")
     d_obj = json.loads(json_str)
 
+    # Enrich existing discrepancies with affected_files and merge validation auto-fixed discrepancies
+    existing_discs = d_obj.get('discrepancies', [])
+    for d in existing_discs:
+        if not d.get('affected_files'):
+            cat = d.get('category', '')
+            if 'Footfall' in cat:
+                d['affected_files'] = ['starter_store_monthly_pnl.csv', 'footfall.csv', 'fixed_store_monthly_pnl.csv']
+            elif 'Waste' in cat:
+                d['affected_files'] = ['waste_log.csv', 'cleaned_waste_log.csv']
+            elif 'Rota' in cat or 'Labour' in cat:
+                d['affected_files'] = ['staff_rota_weekly.csv', 'cleaned_staff_rota_weekly.csv']
+            elif 'Review' in cat:
+                d['affected_files'] = ['customer_reviews.csv', 'cleaned_customer_reviews.csv']
+            else:
+                d['affected_files'] = ['starter_store_monthly_pnl.csv', 'fixed_store_monthly_pnl.csv']
+            d['file'] = ', '.join(d['affected_files'])
+
+    existing_test_ids = {d.get('test_id') for d in existing_discs if d.get('test_id')}
+    existing_fields = {(d.get('category'), d.get('field')) for d in existing_discs}
+    for vd in validation_baseline_report.get('reconciled_discrepancies', []):
+        if vd.get('test_id') not in existing_test_ids and (vd.get('category'), vd.get('field')) not in existing_fields:
+            existing_discs.append(vd)
+            existing_test_ids.add(vd.get('test_id'))
+
+    d_obj['discrepancies'] = existing_discs
     d_obj['events_raw'] = events_raw
     d_obj['events_impact_by_scope'] = events_impact_by_scope
     d_obj['store_sentiment_summary'] = store_sentiment_summary
