@@ -1,10 +1,12 @@
 /**
- * Grind & Crumb - Ultra-Optimized Executive Dashboard & Data Verifier
+ * Grind & Crumb - Ultra-Optimized Executive Dashboard, Data Verifier & Huff Gravity Engine
  * High-performance Vanilla JavaScript, zero external dependencies.
  * Features:
  * - Sortable store league tables by star rating and sentiment score
  * - Interactive event markers on profit trajectory chart with store-specific & chain-wide impact
- * - Fully modular reactive ingestion engine for dynamic CSV events & data updates
+ * - Sales Channel Revenue Contribution Donut Chart (In-Store vs App Click & Collect vs Delivery)
+ * - Catchment & Expansion Profit Estimator with interactive Huff Gravity Cannibalization Model
+ * - Integrated CSV Upload Validation Engine (mirroring & connecting to validate_grind_crumb.py)
  */
 
 (function () {
@@ -15,7 +17,21 @@
   const $$ = (sel) => document.querySelectorAll(sel);
 
   const formatGBP = (num) => {
-    return '£' + Number(num || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const val = Number(num || 0);
+    if (val < 0) {
+      return '-£' + Math.abs(val).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    return '£' + val.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
+  const formatGBPCompact = (num) => {
+    const val = Number(num || 0);
+    const sign = val < 0 ? '-' : '';
+    const abs = Math.abs(val);
+    if (abs >= 1000) {
+      return `${sign}£${(abs / 1000).toFixed(1)}k`;
+    }
+    return `${sign}£${abs.toFixed(0)}`;
   };
 
   const formatInt = (num) => {
@@ -32,18 +48,127 @@
   ];
 
   const STORE_COLORS = {
-    'S01': '#38bdf8', // sky blue
-    'S02': '#10b981', // emerald green
-    'S03': '#f59e0b', // amber
-    'S04': '#ec4899', // pink
-    'S05': '#8b5cf6', // purple
-    'S06': '#06b6d4', // cyan
-    'S07': '#ef4444', // red
-    'S08': '#84cc16', // lime
-    'S09': '#f97316', // orange
-    'S10': '#a855f7', // violet
-    'S11': '#14b8a6', // teal
-    'S12': '#eab308'  // yellow
+    'S01': '#38bdf8',
+    'S02': '#10b981',
+    'S03': '#f59e0b',
+    'S04': '#ec4899',
+    'S05': '#8b5cf6',
+    'S06': '#06b6d4',
+    'S07': '#ef4444',
+    'S08': '#84cc16',
+    'S09': '#f97316',
+    'S10': '#a855f7',
+    'S11': '#14b8a6',
+    'S12': '#eab308'
+  };
+
+  // Real-world inter-site distances (miles) between Candidate Sites (CS1-CS7) and Existing Stores (S01-S12)
+  const DEFAULT_CANDIDATE_DISTANCES = {
+    'CS1': { 'S03': 2.50, 'S12': 2.65 },
+    'CS2': { 'S01': 1.25, 'S11': 1.35, 'S02': 1.45 },
+    'CS3': { 'S07': 0.75, 'S06': 1.05, 'S05': 1.20 },
+    'CS4': { 'S04': 0.55 },
+    'CS5': {},
+    'CS6': { 'S12': 9.50, 'S03': 9.80 },
+    'CS7': { 'S12': 0.42, 'S03': 0.52 }
+  };
+
+  // Canonical CSV Schema Definitions (Synced with validate_grind_crumb.py)
+  const EXPECTED_SCHEMAS = {
+    'stores.csv': {
+      required: ['store_id', 'store_name', 'city', 'format', 'location_type', 'opened_date', 'sqft', 'seats', 'rent_gbp_month', 'store_manager'],
+      pk: ['store_id'],
+      numeric_positive: ['sqft', 'rent_gbp_month'],
+      numeric_non_negative: ['seats'],
+      date_cols: ['opened_date']
+    },
+    'candidate_sites.csv': {
+      required: ['site_id', 'site_name', 'city', 'location_type', 'sqft', 'quoted_rent_gbp_month', 'daily_footfall_street', 'office_workers_500m', 'students_1km', 'median_household_income_gbp', 'competitor_cafes_500m', 'area_vibrancy_index_10', 'est_fitout_gbp'],
+      pk: ['site_id'],
+      numeric_positive: ['sqft', 'quoted_rent_gbp_month', 'daily_footfall_street', 'median_household_income_gbp', 'est_fitout_gbp'],
+      numeric_non_negative: ['office_workers_500m', 'students_1km', 'competitor_cafes_500m'],
+      ranges: { 'area_vibrancy_index_10': [0.0, 10.0] }
+    },
+    'store_catchment.csv': {
+      required: ['store_id', 'daily_footfall_street', 'office_workers_500m', 'students_1km', 'median_household_income_gbp', 'competitor_cafes_500m', 'area_vibrancy_index_10'],
+      pk: ['store_id'],
+      numeric_positive: ['daily_footfall_street', 'median_household_income_gbp'],
+      numeric_non_negative: ['office_workers_500m', 'students_1km', 'competitor_cafes_500m'],
+      ranges: { 'area_vibrancy_index_10': [0.0, 10.0] }
+    },
+    'starter_store_monthly_pnl.csv': {
+      required: ['month', 'store_id', 'store_name', 'city', 'format', 'location_type', 'trading_days', 'total_sales_gbp', 'sales_instore_gbp', 'sales_app_gbp', 'sales_delivery_gbp', 'total_receipts', 'receipts_instore', 'receipts_app', 'receipts_delivery', 'avg_ticket_gbp', 'door_count', 'food_cost_gbp', 'labour_hours', 'labour_cost_gbp', 'delivery_commission_gbp', 'delivery_packaging_gbp', 'rent_gbp', 'business_rates_gbp', 'utilities_gbp', 'repairs_maintenance_gbp', 'other_opex_gbp', 'store_profit_gbp', 'store_margin', 'waste_rate', 'waste_cost_gbp', 'headcount', 'leavers', 'staff_survey_score_10'],
+      pk: ['month', 'store_id'],
+      numeric_positive: ['trading_days', 'total_sales_gbp', 'total_receipts', 'door_count'],
+      numeric_non_negative: ['sales_instore_gbp', 'sales_app_gbp', 'sales_delivery_gbp', 'food_cost_gbp', 'labour_hours', 'labour_cost_gbp', 'delivery_commission_gbp', 'delivery_packaging_gbp', 'rent_gbp'],
+      ranges: { 'staff_survey_score_10': [0.0, 10.0], 'waste_rate': [0.0, 1.0] },
+      month_cols: ['month']
+    },
+    'daily_store_sales.csv': {
+      required: ['date', 'store_id', 'receipts_instore', 'receipts_app', 'receipts_delivery', 'net_sales_instore_gbp', 'net_sales_app_gbp', 'net_sales_delivery_gbp'],
+      pk: ['date', 'store_id'],
+      numeric_non_negative: ['receipts_instore', 'receipts_app', 'receipts_delivery', 'net_sales_instore_gbp', 'net_sales_app_gbp', 'net_sales_delivery_gbp'],
+      date_cols: ['date']
+    },
+    'footfall.csv': {
+      required: ['date', 'store_id', 'daypart', 'door_count'],
+      pk: ['date', 'store_id', 'daypart'],
+      numeric_non_negative: ['door_count'],
+      date_cols: ['date']
+    },
+    'waste_log.csv': {
+      required: ['date', 'store_id', 'category', 'units_prepared', 'units_wasted', 'est_cost_wasted_gbp'],
+      pk: ['date', 'store_id', 'category'],
+      numeric_non_negative: ['units_prepared', 'units_wasted', 'est_cost_wasted_gbp'],
+      date_cols: ['date']
+    },
+    'staff_rota_weekly.csv': {
+      required: ['week_start', 'store_id', 'daypart', 'scheduled_hours', 'avg_hourly_wage_gbp'],
+      pk: ['week_start', 'store_id', 'daypart'],
+      numeric_positive: ['scheduled_hours', 'avg_hourly_wage_gbp'],
+      date_cols: ['week_start']
+    },
+    'staff_monthly.csv': {
+      required: ['month', 'store_id', 'headcount', 'leavers', 'new_starters', 'staff_survey_score_10'],
+      pk: ['month', 'store_id'],
+      numeric_non_negative: ['headcount', 'leavers', 'new_starters'],
+      ranges: { 'staff_survey_score_10': [0.0, 10.0] },
+      month_cols: ['month']
+    },
+    'store_costs_monthly.csv': {
+      required: ['month', 'store_id', 'rent_gbp', 'business_rates_gbp', 'utilities_gbp', 'repairs_maintenance_gbp', 'other_opex_gbp'],
+      pk: ['month', 'store_id'],
+      numeric_non_negative: ['rent_gbp', 'business_rates_gbp', 'utilities_gbp', 'repairs_maintenance_gbp', 'other_opex_gbp'],
+      month_cols: ['month']
+    },
+    'products.csv': {
+      required: ['product_id', 'product_name', 'category', 'menu_price_gbp', 'unit_cost_gbp', 'milk_based', 'delivery_price_gbp'],
+      pk: ['product_id'],
+      numeric_positive: ['menu_price_gbp', 'unit_cost_gbp', 'delivery_price_gbp']
+    },
+    'business_events.csv': {
+      required: ['event', 'date', 'description'],
+      pk: ['event', 'date'],
+      date_cols: ['date']
+    },
+    'promotions.csv': {
+      required: ['promo_id', 'promo_name', 'mechanic', 'start_date', 'end_date', 'stores', 'category', 'marketing_spend_gbp'],
+      pk: ['promo_id'],
+      numeric_non_negative: ['marketing_spend_gbp'],
+      date_cols: ['start_date', 'end_date']
+    },
+    'capex.csv': {
+      required: ['store_id', 'month', 'description', 'capex_gbp'],
+      pk: ['store_id', 'month', 'description'],
+      numeric_positive: ['capex_gbp'],
+      month_cols: ['month']
+    },
+    'customer_reviews.csv': {
+      required: ['review_id', 'review_date', 'source', 'rating', 'review_text'],
+      pk: ['review_id'],
+      ranges: { 'rating': [1.0, 5.0] },
+      date_cols: ['review_date']
+    }
   };
 
   // --- Application State ---
@@ -67,14 +192,24 @@
     activeDataset: 'fixed_pnl',
     compareSelectedStores: ['S03', 'S12'],
     compareTimeWindow: 'ALL',
-    compareMetricType: 'profit'
+    compareMetricType: 'profit',
+    huffParams: {
+      lambda: 2.0,
+      alpha: 0.85,
+      spendMult: 1.0,
+      cityFilter: 'ALL'
+    },
+    validationReport: null,
+    valStatusFilter: 'ALL',
+    pendingUpload: null
   };
 
-  // --- High-Performance Micro-Canvas Charts with Event Annotation ---
+  // --- High-Performance Micro-Canvas Charts ---
   const MicroChart = {
     setupCanvas(canvas) {
       if (!canvas) return null;
       const rect = canvas.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return null;
       const dpr = window.devicePixelRatio || 1;
       canvas.width = rect.width * dpr;
       canvas.height = rect.height * dpr;
@@ -101,7 +236,6 @@
       });
       maxVal = maxVal * 1.15 || 100;
 
-      // Horizontal Grid lines
       ctx.lineWidth = 1;
       ctx.strokeStyle = state.theme === 'dark' ? '#334155' : '#e2e8f0';
       ctx.fillStyle = state.theme === 'dark' ? '#94a3b8' : '#64748b';
@@ -119,7 +253,6 @@
         ctx.fillText(yFormatter(val), padding.left - 8, y + 3);
       }
 
-      // X Axis Month Labels
       ctx.textAlign = 'center';
       const stepX = chartWidth / (labels.length - 1 || 1);
       labels.forEach((lbl, idx) => {
@@ -127,11 +260,9 @@
         ctx.fillText(lbl, x, height - padding.bottom + 18);
       });
 
-      // Draw Event Markers (Dashed vertical lines & badges)
       eventMarkers.forEach((ev, evIdx) => {
         if (ev.monthIdx >= 0 && ev.monthIdx < labels.length) {
           const x = padding.left + ev.monthIdx * stepX;
-          
           ctx.save();
           ctx.beginPath();
           ctx.setLineDash([3, 3]);
@@ -142,10 +273,9 @@
           ctx.stroke();
           ctx.restore();
 
-          // Event Badge Pin at top
           ctx.fillStyle = ev.color || '#f59e0b';
           ctx.beginPath();
-          const badgeY = padding.top - 18 - (evIdx % 2) * 12; // alternate heights if close
+          const badgeY = padding.top - 18 - (evIdx % 2) * 12;
           ctx.roundRect ? ctx.roundRect(x - 28, badgeY, 56, 16, 4) : ctx.rect(x - 28, badgeY, 56, 16);
           ctx.fill();
 
@@ -156,7 +286,6 @@
         }
       });
 
-      // Draw Dataset Lines
       datasets.forEach(ds => {
         ctx.beginPath();
         ctx.strokeStyle = ds.color || '#38bdf8';
@@ -170,7 +299,6 @@
         });
         ctx.stroke();
 
-        // Data point circles
         ctx.fillStyle = ds.color || '#38bdf8';
         labels.forEach((lbl, idx) => {
           const x = padding.left + idx * stepX;
@@ -181,7 +309,6 @@
         });
       });
 
-      // Top Legend
       let legX = padding.left;
       datasets.forEach(ds => {
         ctx.fillStyle = ds.color;
@@ -203,10 +330,10 @@
       ctx.clearRect(0, 0, width, height);
 
       const total = items.reduce((acc, it) => acc + it.value, 0) || 1;
-      const centerX = width * 0.35;
+      const centerX = width * 0.32;
       const centerY = height * 0.5;
-      const outerR = Math.min(centerX, centerY) * 0.8;
-      const innerR = outerR * 0.55;
+      const outerR = Math.min(centerX, centerY) * 0.82;
+      const innerR = outerR * 0.56;
 
       let startAngle = -Math.PI / 2;
       items.forEach(it => {
@@ -225,19 +352,23 @@
       ctx.font = 'bold 12px sans-serif';
       ctx.fillText(formatGBP(total), centerX, centerY + 4);
 
-      let legY = 24;
-      const legX = width * 0.65;
+      let legY = Math.max(24, (height - items.length * 26) / 2);
+      const legX = width * 0.60;
       ctx.font = '11px sans-serif';
       ctx.textAlign = 'left';
 
       items.forEach(it => {
-        if (legY > height - 15) return;
+        if (legY > height - 12) return;
         ctx.fillStyle = it.color;
         ctx.fillRect(legX, legY, 10, 10);
         ctx.fillStyle = state.theme === 'dark' ? '#cbd5e1' : '#334155';
         const pct = ((it.value / total) * 100).toFixed(1) + '%';
+        ctx.font = 'bold 11px sans-serif';
         ctx.fillText(`${it.label} (${pct})`, legX + 16, legY + 9);
-        legY += 20;
+        ctx.font = '10px sans-serif';
+        ctx.fillStyle = state.theme === 'dark' ? '#94a3b8' : '#64748b';
+        ctx.fillText(formatGBP(it.value), legX + 16, legY + 21);
+        legY += 32;
       });
     },
 
@@ -288,13 +419,9 @@
       const range = (maxVal - minVal) || 1;
 
       const formatY = (val) => {
-        if (metricType === 'profit' || metricType === 'sales') {
-          return formatGBP(val);
-        } else if (metricType === 'margin') {
-          return val.toFixed(1) + '%';
-        } else {
-          return formatInt(val);
-        }
+        if (metricType === 'profit' || metricType === 'sales') return formatGBP(val);
+        if (metricType === 'margin') return val.toFixed(1) + '%';
+        return formatInt(val);
       };
 
       ctx.lineWidth = 1;
@@ -358,6 +485,571 @@
           ctx.fill();
         });
       });
+    },
+
+    drawExpansionBarChart(canvasId, projections) {
+      const canvas = $(canvasId);
+      const setup = this.setupCanvas(canvas);
+      if (!setup) return;
+      const { ctx, width, height } = setup;
+
+      ctx.clearRect(0, 0, width, height);
+      if (!projections || !projections.length) return;
+
+      const padding = { top: 34, right: 20, bottom: 45, left: 62 };
+      const chartWidth = width - padding.left - padding.right;
+      const chartHeight = height - padding.top - padding.bottom;
+
+      let minVal = 0;
+      let maxVal = 0;
+      projections.forEach(p => {
+        const vals = [p.standalone_profit_gbp, -p.cannibalized_profit_gbp, p.net_incremental_profit_gbp];
+        vals.forEach(v => {
+          if (v < minVal) minVal = v;
+          if (v > maxVal) maxVal = v;
+        });
+      });
+
+      minVal = Math.min(minVal * 1.2, -2500);
+      maxVal = Math.max(maxVal * 1.18, 8000);
+      const range = (maxVal - minVal) || 1;
+      const yZero = padding.top + chartHeight - ((0 - minVal) / range) * chartHeight;
+
+      // Grid lines
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = state.theme === 'dark' ? '#334155' : '#e2e8f0';
+      ctx.fillStyle = state.theme === 'dark' ? '#94a3b8' : '#64748b';
+      ctx.font = '10px sans-serif';
+      ctx.textAlign = 'right';
+
+      const steps = 5;
+      for (let i = 0; i <= steps; i++) {
+        const val = minVal + (i / steps) * range;
+        const y = padding.top + chartHeight - (i / steps) * chartHeight;
+        ctx.beginPath();
+        ctx.moveTo(padding.left, y);
+        ctx.lineTo(width - padding.right, y);
+        ctx.stroke();
+        ctx.fillText(formatGBPCompact(val), padding.left - 6, y + 3);
+      }
+
+      // Zero axis line
+      ctx.save();
+      ctx.strokeStyle = state.theme === 'dark' ? '#94a3b8' : '#475569';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(padding.left, yZero);
+      ctx.lineTo(width - padding.right, yZero);
+      ctx.stroke();
+      ctx.restore();
+
+      const groupWidth = chartWidth / projections.length;
+      const barWidth = Math.min(18, (groupWidth - 16) / 3);
+
+      projections.forEach((p, idx) => {
+        const groupX = padding.left + idx * groupWidth + (groupWidth - barWidth * 3 - 4) / 2;
+        const series = [
+          { val: p.standalone_profit_gbp, color: '#38bdf8' },
+          { val: -p.cannibalized_profit_gbp, color: '#ef4444' },
+          { val: p.net_incremental_profit_gbp, color: p.net_incremental_profit_gbp >= 0 ? '#10b981' : '#f59e0b' }
+        ];
+
+        series.forEach((s, bIdx) => {
+          const bx = groupX + bIdx * (barWidth + 2);
+          const yVal = padding.top + chartHeight - ((s.val - minVal) / range) * chartHeight;
+          const topY = Math.min(yZero, yVal);
+          const barH = Math.max(2, Math.abs(yVal - yZero));
+          ctx.fillStyle = s.color;
+          ctx.fillRect(bx, topY, barWidth, barH);
+        });
+
+        // Label on X axis
+        const centerX = padding.left + idx * groupWidth + groupWidth / 2;
+        ctx.fillStyle = state.theme === 'dark' ? '#e2e8f0' : '#1e293b';
+        ctx.font = 'bold 10px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(p.site_id, centerX, height - padding.bottom + 15);
+        ctx.fillStyle = state.theme === 'dark' ? '#94a3b8' : '#64748b';
+        ctx.font = '9px sans-serif';
+        ctx.fillText(p.city, centerX, height - padding.bottom + 28);
+      });
+
+      // Legend
+      const legendItems = [
+        { label: 'Standalone Profit', color: '#38bdf8' },
+        { label: 'Cannibalization Loss', color: '#ef4444' },
+        { label: 'Net Chain Profit', color: '#10b981' }
+      ];
+      let legX = padding.left;
+      legendItems.forEach(it => {
+        ctx.fillStyle = it.color;
+        ctx.fillRect(legX, 8, 10, 10);
+        ctx.fillStyle = state.theme === 'dark' ? '#cbd5e1' : '#334155';
+        ctx.font = '10px sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillText(it.label, legX + 14, 17);
+        legX += ctx.measureText(it.label).width + 28;
+      });
+    },
+
+    drawHuffNetworkChart(canvasId, projections, existingBenchmarks) {
+      const canvas = $(canvasId);
+      const setup = this.setupCanvas(canvas);
+      if (!setup) return;
+      const { ctx, width, height } = setup;
+
+      ctx.clearRect(0, 0, width, height);
+
+      // Schematic city cluster coordinates normalized [0..1]
+      const cityClusters = [
+        {
+          city: 'Leeds',
+          cx: 0.22, cy: 0.34,
+          existing: [
+            { id: 'S03', label: 'S03 Briggate', dx: -0.05, dy: 0.04 },
+            { id: 'S12', label: 'S12 Trinity', dx: 0.04, dy: 0.05 }
+          ],
+          candidates: [
+            { id: 'CS1', label: 'CS1 Headingley', dx: -0.08, dy: -0.17 },
+            { id: 'CS7', label: 'CS7 Wellington Pl', dx: 0.01, dy: 0.14 }
+          ]
+        },
+        {
+          city: 'Sheffield',
+          cx: 0.54, cy: 0.34,
+          existing: [
+            { id: 'S01', label: 'S01 Division', dx: -0.05, dy: 0.05 },
+            { id: 'S02', label: 'S02 Station', dx: 0.06, dy: 0.06 },
+            { id: 'S11', label: 'S11 Campus', dx: -0.07, dy: -0.05 }
+          ],
+          candidates: [
+            { id: 'CS2', label: 'CS2 Kelham Is.', dx: 0.04, dy: -0.15 }
+          ]
+        },
+        {
+          city: 'Manchester',
+          cx: 0.82, cy: 0.34,
+          existing: [
+            { id: 'S05', label: 'S05 NQ', dx: -0.04, dy: -0.08 },
+            { id: 'S06', label: 'S06 Spinningfields', dx: -0.07, dy: 0.03 },
+            { id: 'S07', label: 'S07 Piccadilly', dx: 0.05, dy: 0.01 }
+          ],
+          candidates: [
+            { id: 'CS3', label: 'CS3 Oxford Rd', dx: 0.02, dy: 0.15 }
+          ]
+        },
+        {
+          city: 'York',
+          cx: 0.22, cy: 0.80,
+          existing: [
+            { id: 'S04', label: 'S04 Stonegate', dx: -0.05, dy: 0.0 }
+          ],
+          candidates: [
+            { id: 'CS4', label: 'CS4 York Stn', dx: 0.07, dy: 0.0 }
+          ]
+        },
+        {
+          city: 'Liverpool (Greenfield)',
+          cx: 0.54, cy: 0.80,
+          existing: [],
+          candidates: [
+            { id: 'CS5', label: 'CS5 Bold St', dx: 0.0, dy: 0.0 }
+          ]
+        },
+        {
+          city: 'Wakefield (Greenfield)',
+          cx: 0.82, cy: 0.80,
+          existing: [],
+          candidates: [
+            { id: 'CS6', label: 'CS6 Trinity Wk', dx: 0.0, dy: 0.0 }
+          ]
+        }
+      ];
+
+      const projMap = {};
+      (projections || []).forEach(p => { projMap[p.site_id] = p; });
+
+      // Legend at top
+      ctx.font = '10px sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillStyle = '#38bdf8';
+      ctx.beginPath(); ctx.arc(16, 12, 5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = state.theme === 'dark' ? '#cbd5e1' : '#334155';
+      ctx.fillText('Existing Store (S01-S12)', 25, 15);
+
+      ctx.fillStyle = '#10b981';
+      ctx.beginPath(); ctx.arc(165, 12, 5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = state.theme === 'dark' ? '#cbd5e1' : '#334155';
+      ctx.fillText('Net-Positive Candidate', 174, 15);
+
+      ctx.fillStyle = '#ef4444';
+      ctx.beginPath(); ctx.arc(305, 12, 5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = state.theme === 'dark' ? '#cbd5e1' : '#334155';
+      ctx.fillText('Cannibalization / Loss Risk', 314, 15);
+
+      cityClusters.forEach(cluster => {
+        const cx = cluster.cx * width;
+        const cy = cluster.cy * height;
+
+        // Draw catchment zone halo
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(cx, cy, Math.min(width, height) * 0.16, 0, Math.PI * 2);
+        ctx.fillStyle = state.theme === 'dark' ? 'rgba(51, 65, 85, 0.25)' : 'rgba(226, 232, 240, 0.5)';
+        ctx.fill();
+        ctx.strokeStyle = state.theme === 'dark' ? '#334155' : '#cbd5e1';
+        ctx.setLineDash([2, 3]);
+        ctx.stroke();
+        ctx.restore();
+
+        ctx.fillStyle = state.theme === 'dark' ? '#94a3b8' : '#475569';
+        ctx.font = 'bold 10px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(cluster.city, cx, cy - Math.min(width, height) * 0.17 - 3);
+
+        const exCoords = {};
+        cluster.existing.forEach(ex => {
+          exCoords[ex.id] = { x: cx + ex.dx * width, y: cy + ex.dy * height, label: ex.label };
+        });
+
+        // Draw gravity lines from candidate to existing stores
+        cluster.candidates.forEach(cand => {
+          const p = projMap[cand.id];
+          const kx = cx + cand.dx * width;
+          const ky = cy + cand.dy * height;
+
+          if (p && p.cannibalized_stores) {
+            p.cannibalized_stores.forEach(cs => {
+              const target = exCoords[cs.store_id];
+              if (!target) return;
+              ctx.save();
+              ctx.beginPath();
+              ctx.moveTo(kx, ky);
+              ctx.lineTo(target.x, target.y);
+              const isHeavy = cs.cannibalization_pct >= 6.0;
+              ctx.strokeStyle = isHeavy ? '#ef4444' : '#f59e0b';
+              ctx.lineWidth = isHeavy ? 2.2 : 1.2;
+              if (!isHeavy) ctx.setLineDash([3, 2]);
+              ctx.stroke();
+              ctx.restore();
+
+              // Distance & % pill along line
+              const mx = (kx + target.x) / 2;
+              const my = (ky + target.y) / 2;
+              ctx.fillStyle = isHeavy ? '#fca5a5' : '#fde68a';
+              ctx.font = 'bold 8.5px sans-serif';
+              ctx.textAlign = 'center';
+              ctx.fillText(`${cs.distance_miles}mi (-${cs.cannibalization_pct}%)`, mx, my - 2);
+            });
+          }
+
+          // Draw candidate node
+          const isGood = p ? p.net_incremental_profit_gbp >= 1000 : true;
+          ctx.beginPath();
+          ctx.arc(kx, ky, 6.5, 0, Math.PI * 2);
+          ctx.fillStyle = isGood ? '#10b981' : '#ef4444';
+          ctx.fill();
+          ctx.lineWidth = 1.5;
+          ctx.strokeStyle = '#0f172a';
+          ctx.stroke();
+
+          ctx.fillStyle = state.theme === 'dark' ? '#f8fafc' : '#0f172a';
+          ctx.font = 'bold 9.5px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText(cand.label, kx, ky + 15);
+        });
+
+        // Draw existing store nodes
+        Object.values(exCoords).forEach(ex => {
+          ctx.beginPath();
+          ctx.arc(ex.x, ex.y, 5.5, 0, Math.PI * 2);
+          ctx.fillStyle = '#38bdf8';
+          ctx.fill();
+          ctx.fillStyle = state.theme === 'dark' ? '#cbd5e1' : '#334155';
+          ctx.font = '9px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText(ex.label, ex.x, ex.y - 8);
+        });
+      });
+    }
+  };
+
+  // --- Client-Side + Server-Backed CSV Validator Engine (Synced with validate_grind_crumb.py) ---
+  const CSVValidator = {
+    detectSchemaType(filename, columns) {
+      const fname = String(filename || '').toLowerCase().trim();
+      if (EXPECTED_SCHEMAS[fname]) return fname;
+
+      if (fname.includes('pnl')) return 'starter_store_monthly_pnl.csv';
+      if (fname.includes('waste')) return 'waste_log.csv';
+      if (fname.includes('rota')) return 'staff_rota_weekly.csv';
+      if (fname.includes('review')) return 'customer_reviews.csv';
+      if (fname.includes('candidate')) return 'candidate_sites.csv';
+      if (fname.includes('catchment')) return 'store_catchment.csv';
+      if (fname.includes('event')) return 'business_events.csv';
+      if (fname.includes('promo')) return 'promotions.csv';
+      if (fname.includes('capex')) return 'capex.csv';
+      if (fname.includes('cost')) return 'store_costs_monthly.csv';
+      if (fname.includes('footfall')) return 'footfall.csv';
+      if (fname.includes('daily') || fname.includes('sales')) return 'daily_store_sales.csv';
+
+      const colSet = new Set(columns.map(c => String(c).trim()));
+      let bestMatch = 'custom_csv';
+      let bestScore = 0;
+
+      Object.entries(EXPECTED_SCHEMAS).forEach(([schemaName, spec]) => {
+        const req = spec.required || [];
+        if (!req.length) return;
+        const matchCount = req.filter(r => colSet.has(r)).length;
+        const score = matchCount / req.length;
+        if (score > bestScore && score >= 0.7) {
+          bestScore = score;
+          bestMatch = schemaName;
+        }
+      });
+      return bestMatch;
+    },
+
+    validateUploadedFileClient(filename, rawText, parsedRows, headers) {
+      const t0 = performance.now();
+      const results = [];
+      const record = (category, test_id, test_name, status, message, count = 0, samples = []) => {
+        results.push({ test_id, category, test_name, status, message, affected_count: count, samples });
+      };
+
+      const schemaType = this.detectSchemaType(filename, headers);
+      const spec = EXPECTED_SCHEMAS[schemaType];
+
+      // 1. Character Encoding Check
+      if (rawText.includes('\uFFFD')) {
+        record('File Hygiene & Encoding', `FH-ENC-${filename}`, `Character Encoding (${filename})`, 'FAIL',
+          `Corrupted replacement byte (\uFFFD) detected in '${filename}'`, 1);
+      } else {
+        record('File Hygiene & Encoding', `FH-ENC-${filename}`, `Character Encoding (${filename})`, 'PASS',
+          `Valid UTF-8 character encoding verified in '${filename}'.`, 0);
+      }
+
+      // 2. Row Volume Check
+      if (!parsedRows || parsedRows.length === 0) {
+        record('Schema & Column Structure', 'SCHEMA-EMPTY', `Dataset Volume (${filename})`, 'FAIL',
+          `Uploaded CSV '${filename}' contains 0 data rows.`, 1);
+      } else {
+        record('Schema & Column Structure', 'SCHEMA-ROWS', `Dataset Volume (${filename})`, 'PASS',
+          `Loaded ${parsedRows.length} rows and ${headers.length} columns from '${filename}'.`, 0);
+      }
+
+      // 3. Stray / Unnamed Column Check
+      const unnamedCols = headers.filter(h => !h || h.startsWith('Unnamed:'));
+      if (unnamedCols.length > 0) {
+        record('Schema & Column Structure', 'SCHEMA-EXTRA', `Clean Column Headers (${filename})`, 'WARN',
+          `Detected ${unnamedCols.length} unnamed/stray spreadsheet column(s) in '${filename}'.`, unnamedCols.length, unnamedCols);
+      }
+
+      if (spec) {
+        // 4. Required Columns Check
+        const missingCols = (spec.required || []).filter(c => !headers.includes(c));
+        if (missingCols.length > 0) {
+          record('Schema & Column Structure', 'SCHEMA-REQ', `Required Columns (${schemaType})`, 'FAIL',
+            `Missing ${missingCols.length} required column(s) for ${schemaType}: ${missingCols.join(', ')}`,
+            missingCols.length, missingCols);
+        } else {
+          record('Schema & Column Structure', 'SCHEMA-REQ', `Required Columns (${schemaType})`, 'PASS',
+            `All ${spec.required.length} required columns verified for '${schemaType}'.`, 0);
+        }
+
+        // 5. Primary Key Duplicate Check
+        const pkCols = (spec.pk || []).filter(c => headers.includes(c));
+        if (pkCols.length > 0 && parsedRows.length > 0) {
+          const seen = new Set();
+          const dups = [];
+          parsedRows.forEach(r => {
+            const key = pkCols.map(c => r[c]).join(' · ');
+            if (seen.has(key)) dups.push(key);
+            else seen.add(key);
+          });
+          if (dups.length > 0) {
+            record('Primary Key & Duplicate Checks', `PK-${schemaType}`, `Primary Key Uniqueness (${pkCols.join('+')})`, 'FAIL',
+              `Found ${dups.length} duplicate primary key row(s) on (${pkCols.join(', ')}).`, dups.length, dups.slice(0, 5));
+          } else {
+            record('Primary Key & Duplicate Checks', `PK-${schemaType}`, `Primary Key Uniqueness (${pkCols.join('+')})`, 'PASS',
+              `Primary key (${pkCols.join(', ')}) is 100% unique across all ${parsedRows.length} rows.`, 0);
+          }
+        }
+
+        // 6. Positive Numeric Checks
+        (spec.numeric_positive || []).forEach(col => {
+          if (!headers.includes(col)) return;
+          const badSamples = [];
+          let badCount = 0;
+          parsedRows.forEach((r, idx) => {
+            const v = Number(r[col]);
+            if (r[col] === '' || isNaN(v) || v <= 0) {
+              badCount++;
+              if (badSamples.length < 4) badSamples.push(`Row ${idx + 1}: '${r[col]}'`);
+            }
+          });
+          if (badCount > 0) {
+            record('Data Type & Range Checks', `TYPE-POS-${col}`, `Positive Numeric Check (${col})`, 'FAIL',
+              `Column '${col}' has ${badCount} missing, non-numeric, or <= 0 value(s).`, badCount, badSamples);
+          } else {
+            record('Data Type & Range Checks', `TYPE-POS-${col}`, `Positive Numeric Check (${col})`, 'PASS',
+              `All values in '${col}' are valid positive numbers.`, 0);
+          }
+        });
+
+        // 7. Non-Negative Completeness Checks
+        (spec.numeric_non_negative || []).forEach(col => {
+          if (!headers.includes(col)) return;
+          const badSamples = [];
+          let badCount = 0;
+          parsedRows.forEach((r, idx) => {
+            const raw = String(r[col] !== undefined ? r[col] : '').trim();
+            const v = Number(raw);
+            if (raw === '' || raw.toLowerCase() === 'nan' || isNaN(v) || v < 0) {
+              badCount++;
+              if (badSamples.length < 4) badSamples.push(`Row ${idx + 1}: '${raw || 'BLANK'}'`);
+            }
+          });
+          if (badCount > 0) {
+            record('Data Type & Range Checks', `TYPE-NN-${col}`, `Non-Negative Completeness (${col})`, 'FAIL',
+              `Column '${col}' has ${badCount} blank/NaN or negative value(s).`, badCount, badSamples);
+          } else {
+            record('Data Type & Range Checks', `TYPE-NN-${col}`, `Non-Negative Completeness (${col})`, 'PASS',
+              `All values in '${col}' are complete and non-negative.`, 0);
+          }
+        });
+
+        // 8. Domain Bounds Checks
+        Object.entries(spec.ranges || {}).forEach(([col, [lo, hi]]) => {
+          if (!headers.includes(col)) return;
+          const badSamples = [];
+          let badCount = 0;
+          parsedRows.forEach((r, idx) => {
+            const v = Number(r[col]);
+            if (isNaN(v) || v < lo || v > hi) {
+              badCount++;
+              if (badSamples.length < 4) badSamples.push(`Row ${idx + 1}: ${r[col]}`);
+            }
+          });
+          if (badCount > 0) {
+            record('Data Type & Range Checks', `RANGE-${col}`, `Domain Bounds (${col} in [${lo}, ${hi}])`, 'FAIL',
+              `${badCount} value(s) in '${col}' fall outside valid range [${lo}, ${hi}].`, badCount, badSamples);
+          } else {
+            record('Data Type & Range Checks', `RANGE-${col}`, `Domain Bounds (${col} in [${lo}, ${hi}])`, 'PASS',
+              `All values in '${col}' are within [${lo}, ${hi}].`, 0);
+          }
+        });
+
+        // 9. Date & Month ISO Format Checks
+        const isoDateRe = /^\d{4}-\d{2}-\d{2}$/;
+        (spec.date_cols || []).forEach(col => {
+          if (!headers.includes(col)) return;
+          const badDates = parsedRows.filter(r => !isoDateRe.test(String(r[col] || '').trim()));
+          if (badDates.length > 0) {
+            record('Date & Calendar Validation', `DATE-ISO-${col}`, `ISO Date Format (${col})`, 'FAIL',
+              `${badDates.length} row(s) in '${col}' do not follow ISO YYYY-MM-DD format.`,
+              badDates.length, badDates.slice(0, 4).map(r => r[col]));
+          } else {
+            record('Date & Calendar Validation', `DATE-ISO-${col}`, `ISO Date Format (${col})`, 'PASS',
+              `All dates in '${col}' adhere to ISO YYYY-MM-DD format.`, 0);
+          }
+        });
+
+        const isoMonthRe = /^\d{4}-\d{2}$/;
+        (spec.month_cols || []).forEach(col => {
+          if (!headers.includes(col)) return;
+          const badMonths = parsedRows.filter(r => !isoMonthRe.test(String(r[col] || '').trim()));
+          if (badMonths.length > 0) {
+            record('Date & Calendar Validation', `MONTH-ISO-${col}`, `ISO Month Format (${col})`, 'FAIL',
+              `${badMonths.length} row(s) in '${col}' do not follow YYYY-MM format.`,
+              badMonths.length, badMonths.slice(0, 4).map(r => r[col]));
+          } else {
+            record('Date & Calendar Validation', `MONTH-ISO-${col}`, `ISO Month Format (${col})`, 'PASS',
+              `All months in '${col}' adhere to YYYY-MM format.`, 0);
+          }
+        });
+      } else {
+        record('Schema & Column Structure', 'SCHEMA-CUSTOM', `Custom CSV Schema (${filename})`, 'WARN',
+          `File '${filename}' does not match a standard Grind & Crumb table schema; general integrity checks applied.`, 0, headers.slice(0, 6));
+      }
+
+      // 10. Referential Integrity Check on store_id
+      if (headers.includes('store_id') && schemaType !== 'stores.csv') {
+        const validStores = new Set((state.data.stores || []).map(s => s.store_id));
+        const unknown = [];
+        parsedRows.forEach(r => {
+          const sid = String(r.store_id || '').trim();
+          if (sid && !validStores.has(sid) && !unknown.includes(sid)) unknown.push(sid);
+        });
+        if (unknown.length > 0) {
+          record('Referential Integrity', `FK-STORE-${filename}`, `Store ID Foreign Key Validity`, 'FAIL',
+            `Unknown store_id value(s) not in stores.csv: ${unknown.join(', ')}`, unknown.length, unknown);
+        } else {
+          record('Referential Integrity', `FK-STORE-${filename}`, `Store ID Foreign Key Validity`, 'PASS',
+            `All store_id values match canonical stores (S01-S12).`, 0);
+        }
+      }
+
+      // 11. P&L Internal Accounting Formula Check
+      if (schemaType === 'starter_store_monthly_pnl.csv' && parsedRows.length > 0) {
+        let badMath = 0;
+        const mathSamples = [];
+        parsedRows.forEach(r => {
+          const sales = Number(r.total_sales_gbp || 0);
+          const chSum = Number(r.sales_instore_gbp || 0) + Number(r.sales_app_gbp || 0) + Number(r.sales_delivery_gbp || 0);
+          const costs = Number(r.food_cost_gbp || 0) + Number(r.labour_cost_gbp || 0) +
+                        Number(r.delivery_commission_gbp || 0) + Number(r.delivery_packaging_gbp || 0) +
+                        Number(r.rent_gbp || 0) + Number(r.business_rates_gbp || 0) +
+                        Number(r.utilities_gbp || 0) + Number(r.repairs_maintenance_gbp || 0) +
+                        Number(r.other_opex_gbp || 0);
+          const profit = Number(r.store_profit_gbp || 0);
+          if (Math.abs(sales - chSum) > 0.08 || Math.abs((sales - costs) - profit) > 0.15) {
+            badMath++;
+            if (mathSamples.length < 4) mathSamples.push(`${r.store_id} (${r.month})`);
+          }
+        });
+        if (badMath > 0) {
+          record('Aggregation & PnL Reconciliation', 'ARITH-PNL-01', 'P&L Internal Accounting Equation', 'FAIL',
+            `${badMath} row(s) fail channel sales sum or Store Profit = Sales - Costs equation.`, badMath, mathSamples);
+        } else {
+          record('Aggregation & PnL Reconciliation', 'ARITH-PNL-01', 'P&L Internal Accounting Equation', 'PASS',
+            `All ${parsedRows.length} P&L rows balance channel sales, total costs, and net store profit.`, 0);
+        }
+      }
+
+      // 12. Candidate Sites Huff Model Readiness
+      if (schemaType === 'candidate_sites.csv' && parsedRows.length > 0) {
+        record('Catchment & Expansion Readiness', 'EXP-CAND-01', 'Candidate Sites Huff Model Readiness', 'PASS',
+          `All ${parsedRows.length} candidate expansion sites ready for Huff Gravity & Profit projection.`, 0);
+      }
+
+      const durationMs = Number((performance.now() - t0).toFixed(2));
+      const totalTests = results.length;
+      const passed = results.filter(r => r.status === 'PASS').length;
+      const warnings = results.filter(r => r.status === 'WARN').length;
+      const failed = results.filter(r => r.status === 'FAIL').length;
+      const overallStatus = failed === 0 && warnings === 0 ? 'PASS' : (failed === 0 ? 'WARN' : 'FAIL');
+
+      return {
+        status: overallStatus,
+        filename,
+        detected_schema: schemaType,
+        row_count: parsedRows.length,
+        column_count: headers.length,
+        columns: headers,
+        execution_metadata: {
+          timestamp: new Date().toISOString(),
+          duration_ms: durationMs
+        },
+        summary: {
+          total_tests: totalTests,
+          passed,
+          warnings,
+          failed,
+          pass_rate_percentage: totalTests > 0 ? Number(((passed / totalTests) * 100).toFixed(1)) : 0.0
+        },
+        results
+      };
     }
   };
 
@@ -368,16 +1060,18 @@
         console.warn('Dashboard data not yet available.');
         return;
       }
+      state.validationReport = state.data.validation_baseline_report || null;
+
       this.populateFilterDropdowns();
       this.bindEvents();
       this.renderVerificationTab();
       this.renderDashboardTab();
       this.renderMultiStoreCompareTab();
       this.renderChannelEconomicsTab();
-      this.renderEventsImpactTab();
       this.renderSentimentPipelineTab();
       this.renderCatchmentTab();
       this.renderExplorerTab();
+      this.renderValidationReportPanel();
     },
 
     bindEvents() {
@@ -387,22 +1081,28 @@
           $$('.tab-panel').forEach(p => p.classList.remove('active'));
           tab.classList.add('active');
           const tabId = tab.dataset.tab;
-          $(tabId).classList.add('active');
+          const panel = $(tabId);
+          if (panel) panel.classList.add('active');
           state.currentTab = tabId;
 
           if (tabId === 'tab-dashboard') this.renderDashboardTab();
           if (tabId === 'tab-compare') this.renderMultiStoreCompareTab();
           if (tabId === 'tab-channels') this.renderChannelEconomicsTab();
-          if (tabId === 'tab-events') this.renderEventsImpactTab();
           if (tabId === 'tab-sentiment') this.renderSentimentPipelineTab();
+          if (tabId === 'tab-catchment') this.renderCatchmentTab();
+          if (tabId === 'tab-explorer') {
+            this.renderExplorerTab();
+            this.renderValidationReportPanel();
+          }
         });
       });
 
       $('btnThemeToggle').addEventListener('click', () => {
         state.theme = state.theme === 'dark' ? 'light' : 'dark';
         document.documentElement.setAttribute('data-theme', state.theme);
-        this.renderDashboardTab();
+        if (state.currentTab === 'tab-dashboard') this.renderDashboardTab();
         if (state.currentTab === 'tab-compare') this.renderMultiStoreCompareTab();
+        if (state.currentTab === 'tab-catchment') this.renderCatchmentTab();
       });
 
       ['filterStore', 'filterCity', 'filterFormat', 'filterMonth'].forEach(id => {
@@ -433,7 +1133,6 @@
         this.renderDiscrepancyTable();
       });
 
-      // League Table sorting (Supports sales, profit, margin, footfall, conversion, ticket, rating, sentiment)
       $$('#storeLeagueTable th.sortable').forEach(th => {
         th.addEventListener('click', () => {
           const col = th.dataset.sort;
@@ -443,7 +1142,6 @@
         });
       });
 
-      // Sentiment Store Sorting & Search
       $('sortSentimentStores').addEventListener('change', (e) => {
         state.sentimentSortOrder = e.target.value;
         this.renderSentimentPipelineTab();
@@ -457,6 +1155,44 @@
         this.renderSentimentPipelineTab();
       });
 
+      // Huff Gravity Model Controls
+      ['huffLambdaSlider', 'huffAlphaSlider', 'huffSpendSlider'].forEach(id => {
+        const el = $(id);
+        if (el) {
+          el.addEventListener('input', () => {
+            state.huffParams.lambda = Number($('huffLambdaSlider').value);
+            state.huffParams.alpha = Number($('huffAlphaSlider').value);
+            state.huffParams.spendMult = Number($('huffSpendSlider').value);
+            $('huffLambdaVal').textContent = state.huffParams.lambda.toFixed(1);
+            $('huffAlphaVal').textContent = state.huffParams.alpha.toFixed(2);
+            $('huffSpendVal').textContent = Math.round(state.huffParams.spendMult * 100) + '%';
+            this.renderCatchmentTab();
+          });
+        }
+      });
+
+      if ($('huffCityFilter')) {
+        $('huffCityFilter').addEventListener('change', (e) => {
+          state.huffParams.cityFilter = e.target.value;
+          this.renderCatchmentTab();
+        });
+      }
+
+      if ($('btnResetHuffModel')) {
+        $('btnResetHuffModel').addEventListener('click', () => {
+          state.huffParams = { lambda: 2.0, alpha: 0.85, spendMult: 1.0, cityFilter: 'ALL' };
+          $('huffLambdaSlider').value = '2.0';
+          $('huffAlphaSlider').value = '0.85';
+          $('huffSpendSlider').value = '1.00';
+          $('huffCityFilter').value = 'ALL';
+          $('huffLambdaVal').textContent = '2.0';
+          $('huffAlphaVal').textContent = '0.85';
+          $('huffSpendVal').textContent = '100%';
+          this.renderCatchmentTab();
+        });
+      }
+
+      // Explorer & Validation Controls
       $('selectDataset').addEventListener('change', (e) => {
         state.activeDataset = e.target.value;
         this.renderExplorerTab();
@@ -464,11 +1200,36 @@
 
       $('btnExportActiveTable').addEventListener('click', () => this.exportActiveTableToCSV());
 
-      $('btnDownloadFixedPnL').addEventListener('click', () => this.downloadFile('fixed_pnl'));
-      $('btnDownloadReport').addEventListener('click', () => this.downloadFile('report_csv'));
-      $('btnDownloadMarkdown').addEventListener('click', () => this.downloadFile('summary_md'));
+      if ($('valStatusFilter')) {
+        $('valStatusFilter').addEventListener('change', (e) => {
+          state.valStatusFilter = e.target.value;
+          this.renderValidationReportPanel();
+        });
+      }
 
-      // Drag & Drop Live Ingestion
+      if ($('btnRunBaselineValidation')) {
+        $('btnRunBaselineValidation').addEventListener('click', () => this.runBaselineValidation());
+      }
+
+      if ($('btnDownloadValidationJson')) {
+        $('btnDownloadValidationJson').addEventListener('click', () => {
+          if (!state.validationReport) return;
+          this.downloadBlob(JSON.stringify(state.validationReport, null, 2), 'validation_report.json', 'application/json');
+        });
+      }
+
+      if ($('btnConfirmIngestUpload')) {
+        $('btnConfirmIngestUpload').addEventListener('click', () => this.applyPendingUpload());
+      }
+
+      if ($('btnDismissUpload')) {
+        $('btnDismissUpload').addEventListener('click', () => {
+          state.pendingUpload = null;
+          $('valUploadActionBanner').style.display = 'none';
+        });
+      }
+
+      // Drag & Drop Live Validated Ingestion
       const dropzone = $('dropzone');
       dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
       dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
@@ -501,6 +1262,7 @@
       window.addEventListener('resize', () => {
         if (state.currentTab === 'tab-dashboard') this.renderDashboardTab();
         if (state.currentTab === 'tab-compare') this.renderMultiStoreCompareTab();
+        if (state.currentTab === 'tab-catchment') this.renderCatchmentTab();
       });
     },
 
@@ -581,7 +1343,7 @@
       });
     },
 
-    // --- TAB 2: EXECUTIVE P&L DASHBOARD WITH INTEGRATED EVENTS TRAJECTORY ---
+    // --- TAB 2: EXECUTIVE P&L DASHBOARD ---
     getFilteredPnL() {
       const pnl = state.data.pnl_fixed || [];
       const storeMap = {};
@@ -602,12 +1364,16 @@
       const selectedStore = state.filters.store;
 
       let totalSales = 0, totalProfit = 0, totalFootfall = 0, totalReceipts = 0;
+      let salesInStore = 0, salesApp = 0, salesDelivery = 0;
       let totalFoodCost = 0, totalLabourCost = 0, totalRent = 0, totalRates = 0;
       let totalUtilities = 0, totalRepairs = 0, totalOtherOpex = 0;
       let totalCommission = 0, totalPackaging = 0;
 
       rows.forEach(r => {
         totalSales += Number(r.total_sales_gbp || 0);
+        salesInStore += Number(r.sales_instore_gbp || 0);
+        salesApp += Number(r.sales_app_gbp || 0);
+        salesDelivery += Number(r.sales_delivery_gbp || 0);
         totalProfit += Number(r.store_profit_gbp || 0);
         totalFootfall += Number(r.door_count || 0);
         totalReceipts += Number(r.total_receipts || 0);
@@ -635,12 +1401,10 @@
       $('kpiConversionRate').textContent = formatPct(conversionRate);
       $('kpiAvgTicket').textContent = formatGBP(avgTicket);
 
-      // Trajectory Scope label
       $('trajectoryScopeLabel').textContent = selectedStore === 'ALL'
         ? 'Scope: Chain-Wide (All 12 Stores)'
-        : `Scope: Store ${selectedStore} (${(state.data.stores.find(s=>s.store_id===selectedStore)||{}).store_name || selectedStore})`;
+        : `Scope: Store ${selectedStore} (${(state.data.stores.find(s => s.store_id === selectedStore) || {}).store_name || selectedStore})`;
 
-      // Monthly sales & profit series
       const salesByMonth = MONTH_LIST.map(m => {
         return rows.filter(r => r.month === m).reduce((acc, r) => acc + Number(r.total_sales_gbp || 0), 0);
       });
@@ -648,19 +1412,18 @@
         return rows.filter(r => r.month === m).reduce((acc, r) => acc + Number(r.store_profit_gbp || 0), 0);
       });
 
-      // Prepare Event Markers for Canvas
       const scopeEvents = (state.data.events_impact_by_scope && state.data.events_impact_by_scope[selectedStore])
         ? state.data.events_impact_by_scope[selectedStore]
-        : (state.data.events_impact_by_scope ? state.data.events_impact_by_scope["ALL"] : []);
+        : (state.data.events_impact_by_scope ? state.data.events_impact_by_scope['ALL'] : []);
 
       const eventMarkers = scopeEvents.map((ev, i) => {
         let badgeColor = '#f59e0b';
-        let badgeText = `EV${i+1}`;
+        let badgeText = `EV${i + 1}`;
         if (ev.event.includes('Trinity')) { badgeColor = '#38bdf8'; badgeText = 'Trinity'; }
         else if (ev.event.includes('Oat')) { badgeColor = '#10b981'; badgeText = 'Oat +40p'; }
         else if (ev.event.includes('v3.0')) { badgeColor = '#ef4444'; badgeText = 'App v3'; }
         else if (ev.event.includes('Wage') || ev.event.includes('Dashly')) { badgeColor = '#8b5cf6'; badgeText = 'Wage/Fee'; }
-        
+
         return {
           monthIdx: ev.month_idx,
           label: ev.event,
@@ -680,10 +1443,9 @@
         eventMarkers
       );
 
-      // Render the Event Trajectory Impact Cards beneath the chart
       this.renderEventTrackerPanel(selectedStore);
 
-      // Cost Breakdown Donut Chart
+      // Total Cost Breakdown Donut Chart
       MicroChart.drawDonutChart('chartCostBreakdown', [
         { label: 'Labour', value: totalLabourCost, color: '#38bdf8' },
         { label: 'Food Cost', value: totalFoodCost, color: '#f59e0b' },
@@ -693,17 +1455,23 @@
         { label: 'Repairs & Opex', value: totalRepairs + totalOtherOpex, color: '#64748b' }
       ]);
 
+      // Sales Channel Revenue Contribution Donut Chart
+      MicroChart.drawDonutChart('chartChannelSplit', [
+        { label: 'In-Store Walk-in', value: salesInStore, color: '#10b981' },
+        { label: 'Third-Party Delivery', value: salesDelivery, color: '#f59e0b' },
+        { label: 'App Click & Collect', value: salesApp, color: '#38bdf8' }
+      ]);
+
       this.renderStoreLeagueTable();
     },
 
-    // --- EVENT TRAJECTORY IMPACT TRACKER (STORE-SPECIFIC & GENERAL) ---
     renderEventTrackerPanel(selectedStore) {
       const container = $('eventTrackerCardsContainer');
       const scopeBadge = $('eventTrackerScopeBadge');
       container.innerHTML = '';
 
-      const scopeKey = selectedStore || "ALL";
-      scopeBadge.textContent = scopeKey === "ALL" ? "Chain-Wide (All Stores)" : `Store ${scopeKey}`;
+      const scopeKey = selectedStore || 'ALL';
+      scopeBadge.textContent = scopeKey === 'ALL' ? 'Chain-Wide (All Stores)' : `Store ${scopeKey}`;
 
       const eventsList = (state.data.events_impact_by_scope && state.data.events_impact_by_scope[scopeKey])
         ? state.data.events_impact_by_scope[scopeKey]
@@ -722,7 +1490,7 @@
           <div class="event-tracker-title">
             <span>${ev.event}</span>
             <span class="event-shift-badge ${isUp ? 'up' : 'down'}">
-              ${isUp ? '▲ +' : '▼ -'}${formatGBP(Math.abs(ev.delta_profit))} (${isUp ? '+' : ''}${ev.pct_profit}%)
+              ${isUp ? '▲ +' : '▼ '}${formatGBP(ev.delta_profit)} (${isUp ? '+' : ''}${ev.pct_profit}%)
             </span>
           </div>
           <div style="font-size: 0.725rem; color: var(--text-dim);">
@@ -740,7 +1508,6 @@
       });
     },
 
-    // --- LEAGUE TABLE (SORTABLE BY STAR RATING & SENTIMENT) ---
     renderStoreLeagueTable() {
       const tbody = $('storeLeagueTableBody');
       tbody.innerHTML = '';
@@ -827,7 +1594,7 @@
       });
     },
 
-    // --- TAB 3: MULTI-STORE PROFIT / LOSS COMPARISON ENGINE ---
+    // --- TAB 3: MULTI-STORE COMPARISON ---
     applyComparePreset(presetType) {
       const stores = state.data.stores || [];
       if (presetType === 'leeds') {
@@ -875,7 +1642,6 @@
       const timeWindow = ($('compareTimeWindow') && $('compareTimeWindow').value) || state.compareTimeWindow;
       const metricType = ($('compareMetricType') && $('compareMetricType').value) || state.compareMetricType;
 
-      // 1. Render Store Chips
       const chipsContainer = $('compareStoreChipsContainer');
       if (chipsContainer) {
         chipsContainer.innerHTML = '';
@@ -903,7 +1669,6 @@
         counter.textContent = `Selected: ${selectedIds.length} of ${stores.length} stores`;
       }
 
-      // 2. Render Comparative Multi-Store Timeline Chart
       const metricLabels = {
         profit: 'Store Profit / Loss (£)',
         margin: 'Store Margin (%)',
@@ -963,7 +1728,6 @@
         metricType
       );
 
-      // 3. Collect Aggregated Period Stats for each selected store
       const storeStats = selectedIds.map(id => {
         const sInfo = stores.find(s => s.store_id === id) || { store_id: id, store_name: id, city: '', format: '', store_manager: '' };
         const sent = sentimentMap[id] || { avg_rating: 4.0, avg_sentiment: 0.3, sentiment_label: 'Positive', current_positives: [], things_to_improve: [] };
@@ -997,43 +1761,16 @@
         const margin = sales > 0 ? profit / sales : 0;
         const conv = footfall > 0 ? receipts / footfall : 0;
         const ticket = receipts > 0 ? sales / receipts : 0;
-        const headcount = rows.length ? rows[rows.length - 1].headcount : (sInfo.headcount || '-');
-        const leavers = rows.reduce((acc, r) => acc + Number(r.leavers || 0), 0);
 
         return {
-          id,
-          sInfo,
-          sent,
-          isOpen,
-          sales,
-          salesInStore,
-          salesApp,
-          salesDelivery,
-          receipts,
-          footfall,
-          tradingDays,
-          foodCost,
-          labourHours,
-          labourCost,
-          deliveryComm,
-          deliveryPkg,
-          rent,
-          rates,
-          utilities,
-          repairs,
-          otherOpex,
-          wasteCost,
-          profit,
-          margin,
-          conv,
-          ticket,
-          headcount,
-          leavers,
+          id, sInfo, sent, isOpen, sales, salesInStore, salesApp, salesDelivery,
+          receipts, footfall, tradingDays, foodCost, labourHours, labourCost,
+          deliveryComm, deliveryPkg, rent, rates, utilities, repairs, otherOpex,
+          wasteCost, profit, margin, conv, ticket,
           totalCosts: foodCost + labourCost + deliveryComm + deliveryPkg + rent + rates + utilities + repairs + otherOpex
         };
       });
 
-      // 4. Render Head-to-Head Cards
       const cardsGrid = $('compareCardsGrid');
       if (cardsGrid) {
         cardsGrid.innerHTML = '';
@@ -1117,7 +1854,7 @@
             </div>
             <div class="compare-metric-row">
               <span>Customer Sentiment:</span>
-              <span>★ <strong>${st.sent.avg_rating.toFixed(2)}</strong> <span class="badge-tag info" style="font-size: 0.65rem; padding: 1px 5px;">${st.sent.sentiment_label}</span></span>
+              <span>★ <strong>${st.sent.avg_rating.toFixed(2)}</strong> <span class="badge-tag info" style="font-size: 0.65rem; padding: 1px 5px;">${st.sent.sentiment_label || 'Positive'}</span></span>
             </div>
             <div style="font-size: 0.725rem; color: var(--text-dim); margin-top: 0.6rem; display: flex; justify-content: space-between;">
               <span>Manager: <strong>${st.sInfo.store_manager || 'N/A'}</strong></span>
@@ -1128,7 +1865,6 @@
         });
       }
 
-      // 5. Render Detailed Side-by-Side Financial Comparison Table
       const timeLabel = $('compareTableTimeLabel');
       if (timeLabel) {
         timeLabel.textContent = timeWindow === 'ALL' ? 'Full Year (2025-07 to 2026-06)' : `Month: ${timeWindow}`;
@@ -1152,7 +1888,6 @@
           theadRow.appendChild(th);
         });
 
-        // Variance or Average Column
         let hasVarianceCol = false;
         let isTwoStores = storeStats.length === 2;
         if (isTwoStores) {
@@ -1173,7 +1908,6 @@
           theadRow.appendChild(thAvg);
         }
 
-        // Table Rows Definition
         const addSectionHeader = (title) => {
           const tr = document.createElement('tr');
           const colSpan = storeStats.length + (hasVarianceCol ? 2 : 1);
@@ -1254,28 +1988,24 @@
           tbody.appendChild(tr);
         };
 
-        // Section 1: Store Profile
         addSectionHeader('📍 Store Profile & Operations');
         addRow('Store Format & Location', st => `${st.sInfo.format} (${st.sInfo.location_type})`, 'text');
         addRow('Trading Days in Period', st => st.tradingDays, 'int');
         addRow('Store Capacity & Space', st => `${st.sInfo.seats || '0'} seats · ${st.sInfo.sqft || '0'} sqft`, 'text');
         addRow('Store Manager', st => st.sInfo.store_manager || 'N/A', 'text');
 
-        // Section 2: Footfall & Volume
         addSectionHeader('🚶 Footfall, Volume & Conversion');
         addRow('Reconciled Door Count (Footfall)', st => st.footfall, 'int', false, true);
         addRow('Total Transactions (Receipts)', st => st.receipts, 'int', false, true);
         addRow('Footfall Conversion Rate', st => st.conv, 'pct', false, true);
         addRow('Average Ticket Size', st => st.ticket, 'gbp', false, true);
 
-        // Section 3: Revenue Channels
         addSectionHeader('💳 Revenue Mix by Sales Channel');
         addRow('In-Store Walk-in Sales', st => st.salesInStore, 'gbp', false, true);
         addRow('App Click & Collect Sales', st => st.salesApp, 'gbp', false, true);
         addRow('Third-Party Delivery Sales', st => st.salesDelivery, 'gbp', false, true);
         addRow('Total Revenue / Sales', st => st.sales, 'gbp', true, true);
 
-        // Section 4: COGS & Labour
         addSectionHeader('🥐 Cost of Goods Sold (COGS) & Labour');
         addRow('Food Cost (COGS)', st => st.foodCost, 'gbp', false, false);
         addRow('Food Cost % of Revenue', st => st.sales > 0 ? st.foodCost / st.sales : 0, 'pct', false, false);
@@ -1284,13 +2014,11 @@
         addRow('Total Labour Payroll', st => st.labourCost, 'gbp', false, false);
         addRow('Labour Cost % of Revenue', st => st.sales > 0 ? st.labourCost / st.sales : 0, 'pct', false, false);
 
-        // Section 5: Delivery Deductions
         addSectionHeader('🛵 Third-Party Delivery Deductions');
         addRow('Platform Commissions (27-33%)', st => st.deliveryComm, 'gbp', false, false);
         addRow('Delivery Packaging Costs (45p/order)', st => st.deliveryPkg, 'gbp', false, false);
         addRow('Total Delivery Direct Deductions', st => st.deliveryComm + st.deliveryPkg, 'gbp', true, false);
 
-        // Section 6: Fixed Overheads
         addSectionHeader('🏢 Property & Operational Overheads');
         addRow('Premises Rent', st => st.rent, 'gbp', false, false);
         addRow('Business Rates', st => st.rates, 'gbp', false, false);
@@ -1299,15 +2027,13 @@
         addRow('Other Operating Expenses (Opex)', st => st.otherOpex, 'gbp', false, false);
         addRow('Total Store Operating Costs', st => st.totalCosts, 'gbp', true, false);
 
-        // Section 7: Profitability
         addSectionHeader('📊 Net Profitability & Contribution');
         addRow('Store Net Profit / Loss (GBP)', st => st.profit, 'gbp', true, true);
         addRow('Store Net Profit Margin (%)', st => st.margin, 'pct', true, true);
 
-        // Section 8: Sentiment
         addSectionHeader('⭐ Customer Feedback & Sentiment');
         addRow('Average Google Review Star Rating', st => st.sent.avg_rating, 'text');
-        addRow('AI Sentiment Score (-1.0 to +1.0)', st => `${st.sent.avg_sentiment >= 0 ? '+' : ''}${st.sent.avg_sentiment.toFixed(3)} (${st.sent.sentiment_label})`, 'text');
+        addRow('AI Sentiment Score (-1.0 to +1.0)', st => `${st.sent.avg_sentiment >= 0 ? '+' : ''}${st.sent.avg_sentiment.toFixed(3)} (${st.sent.sentiment_label || 'Positive'})`, 'text');
         addRow('Current Positives Highlight', st => (st.sent.current_positives && st.sent.current_positives.length) ? st.sent.current_positives.slice(0, 2).join('; ') : 'Quality coffee & staff', 'text');
         addRow('Areas for Improvement', st => (st.sent.things_to_improve && st.sent.things_to_improve.length) ? st.sent.things_to_improve.slice(0, 2).join('; ') : 'Wait times during peak', 'text');
       }
@@ -1397,34 +2123,7 @@
       });
     },
 
-    // --- TAB 4: BUSINESS EVENTS IMPACT ---
-    renderEventsImpactTab() {
-      const events = state.data.events_impact || [];
-      const grid = $('eventsGrid');
-      grid.innerHTML = '';
-
-      events.forEach(ev => {
-        const card = document.createElement('div');
-        card.className = 'event-card';
-        card.innerHTML = `
-          <span class="event-badge">${ev.type}</span>
-          <h4>${ev.event}</h4>
-          <div class="event-date">📅 Effective Date: ${ev.date}</div>
-          <p class="event-summary">${ev.summary}</p>
-          <div class="event-metrics-box">
-            ${Object.entries(ev.metrics).map(([k, v]) => `
-              <div>
-                <span style="color: var(--text-dim); display: block; font-size: 0.7rem;">${k.replace(/_/g, ' ')}:</span>
-                <strong style="color: var(--accent-primary);">${typeof v === 'number' && v > 50 ? formatGBP(v) : v}</strong>
-              </div>
-            `).join('')}
-          </div>
-        `;
-        grid.appendChild(card);
-      });
-    },
-
-    // --- TAB 5: SENTIMENT PIPELINE & STORE INSIGHTS (WITH SORTING) ---
+    // --- TAB 5: SENTIMENT PIPELINE & STORE INSIGHTS ---
     renderSentimentPipelineTab() {
       const container = $('sentimentStoreCardsContainer');
       container.innerHTML = '';
@@ -1444,7 +2143,6 @@
         return true;
       });
 
-      // Sort Store Cards
       entries.sort((a, b) => {
         if (sortOrder === 'sentiment_desc') return b.avg_sentiment - a.avg_sentiment;
         if (sortOrder === 'sentiment_asc') return a.avg_sentiment - b.avg_sentiment;
@@ -1502,33 +2200,485 @@
       });
     },
 
-    // --- TAB 6: CATCHMENT & EXPANSION ---
-    renderCatchmentTab() {
-      const tbody = $('candidateSitesTableBody');
-      tbody.innerHTML = '';
-      const sites = state.data.candidate_sites || [];
+    // --- TAB 6: CATCHMENT & EXPANSION (PROFIT ESTIMATOR & HUFF GRAVITY MODEL) ---
+    computeDynamicHuffModel() {
+      const pnl = state.data.pnl_fixed || [];
+      const storesList = state.data.stores || [];
+      const catchmentList = state.data.catchment || [];
+      const candidatesList = state.data.candidate_sites || [];
 
-      sites.forEach(s => {
+      const lam = state.huffParams.lambda;
+      const alpha = state.huffParams.alpha;
+      const spendMult = state.huffParams.spendMult;
+
+      const catchMap = {};
+      catchmentList.forEach(c => { catchMap[c.store_id] = c; });
+
+      const existingBenchmarks = {};
+      storesList.forEach(s => {
+        const sid = s.store_id;
+        const rows = pnl.filter(r => r.store_id === sid);
+        const steadyRows = sid === 'S12' ? rows.filter(r => r.month >= '2025-10') : rows;
+        const n = steadyRows.length || 1;
+
+        const avgSales = steadyRows.reduce((acc, r) => acc + Number(r.total_sales_gbp || 0), 0) / n;
+        const avgReceipts = steadyRows.reduce((acc, r) => acc + Number(r.total_receipts || 0), 0) / n;
+        const avgDoor = steadyRows.reduce((acc, r) => acc + Number(r.door_count || 0), 0) / n;
+        const avgProfit = steadyRows.reduce((acc, r) => acc + Number(r.store_profit_gbp || 0), 0) / n;
+        const avgTicket = avgReceipts > 0 ? avgSales / avgReceipts : 5.95;
+
+        const cInfo = catchMap[sid] || {};
+        const sqft = Number(s.sqft || 1400);
+        const vib = Number(cInfo.area_vibrancy_index_10 || 7.2);
+        const comp = Number(cInfo.competitor_cafes_500m || 8);
+        const attractiveness = Math.pow(sqft / 1400.0, alpha) * Math.pow(vib / 7.2, 0.90);
+
+        existingBenchmarks[sid] = {
+          store_id: sid,
+          store_name: s.store_name,
+          city: s.city,
+          format: s.format,
+          location_type: s.location_type,
+          sqft,
+          rent_gbp_month: Number(s.rent_gbp_month || 0),
+          daily_footfall_street: Number(cInfo.daily_footfall_street || 25000),
+          office_workers_500m: Number(cInfo.office_workers_500m || 5000),
+          students_1km: Number(cInfo.students_1km || 4000),
+          median_household_income_gbp: Number(cInfo.median_household_income_gbp || 33000),
+          competitor_cafes_500m: comp,
+          area_vibrancy_index_10: vib,
+          avg_monthly_receipts: Math.round(avgReceipts),
+          avg_ticket_gbp: Number(avgTicket.toFixed(2)),
+          avg_monthly_sales_gbp: Number(avgSales.toFixed(2)),
+          avg_monthly_profit_gbp: Number(avgProfit.toFixed(2)),
+          attractiveness: Number(attractiveness.toFixed(3)),
+          marginal_contribution_rate: 0.418
+        };
+      });
+
+      const locBaseTicket = {
+        'Office district': 6.24,
+        'High street': 6.14,
+        'Tourist': 6.19,
+        'Affluent town': 6.22,
+        'Shopping centre': 5.96,
+        'Transit': 5.76,
+        'Campus': 5.62
+      };
+
+      const projections = candidatesList.map(cand => {
+        const cid = cand.site_id;
+        const cname = cand.site_name;
+        const city = cand.city;
+        const locType = cand.location_type;
+        const sqft = Number(cand.sqft || 1400);
+        const rent = Number(cand.quoted_rent_gbp_month || 8000);
+        const streetFf = Number(cand.daily_footfall_street || 20000);
+        const officeW = Number(cand.office_workers_500m || 3000);
+        const students = Number(cand.students_1km || 3000);
+        const income = Number(cand.median_household_income_gbp || 32000);
+        const comp = Number(cand.competitor_cafes_500m || 8);
+        const vib = Number(cand.area_vibrancy_index_10 || 7.0);
+        const fitout = Number(cand.est_fitout_gbp || 300000);
+
+        const attractiveness = Math.pow(sqft / 1400.0, alpha) * Math.pow(vib / 7.2, 0.90);
+
+        const baseTkt = locBaseTicket[locType] || 6.08;
+        const incomeFactor = 1.0 + 0.14 * ((income - 33250.0) / 33250.0);
+        const estAvgTicket = Number((baseTkt * incomeFactor * spendMult).toFixed(2));
+
+        const rawDemandPool = (streetFf * 0.21) + (officeW * 0.36) + (students * 0.15);
+        const compResistance = 1.0 + 0.022 * comp;
+        const sizeCapFactor = Math.pow(sqft / 1400.0, 0.36 * alpha);
+        const vibBoost = Math.pow(vib / 7.2, 0.78);
+
+        let estMonthlyReceipts = Math.round(((5450.0 + rawDemandPool * 0.62) * sizeCapFactor * vibBoost) / compResistance);
+        const maxCapReceipts = sqft >= 850 ? Math.round(sqft * 9.2) : Math.round(sqft * 15.8);
+        estMonthlyReceipts = Math.min(estMonthlyReceipts, maxCapReceipts);
+
+        const estMonthlySales = Number((estMonthlyReceipts * estAvgTicket).toFixed(2));
+        const foodCost = Number((estMonthlySales * 0.274).toFixed(2));
+        const isKioskOrTransit = (sqft < 800 || locType === 'Transit' || locType === 'Campus');
+        const deliveryCost = Number((estMonthlySales * (isKioskOrTransit ? 0.025 : 0.058)).toFixed(2));
+        const labourCost = Number((3450.0 + (sqft * 1.25) + (estMonthlySales * 0.205)).toFixed(2));
+        const businessRates = Number((rent * 0.22).toFixed(2));
+        const utilitiesAndOpex = Number((1420.0 + (sqft * 0.98)).toFixed(2));
+
+        const totalCosts = Number((foodCost + labourCost + deliveryCost + rent + businessRates + utilitiesAndOpex).toFixed(2));
+        const standaloneProfit = Number((estMonthlySales - totalCosts).toFixed(2));
+        const standaloneMarginPct = estMonthlySales > 0 ? Number(((standaloneProfit / estMonthlySales) * 100).toFixed(1)) : 0.0;
+
+        // Huff Gravity Cannibalization across existing stores
+        let distances = DEFAULT_CANDIDATE_DISTANCES[cid];
+        if (!distances) {
+          // Auto-infer for newly uploaded custom candidate sites in existing cities
+          distances = {};
+          Object.values(existingBenchmarks).forEach(eb => {
+            if (eb.city.toLowerCase() === city.toLowerCase()) {
+              distances[eb.store_id] = Number(cand.distance_nearest_store_miles || 0.85);
+            }
+          });
+        }
+
+        const cannibalizedStores = [];
+        let totalCannibSales = 0;
+        let totalCannibProfit = 0;
+        let totalCannibReceipts = 0;
+
+        Object.entries(distances).sort((a, b) => a[1] - b[1]).forEach(([esid, distMiles]) => {
+          const eb = existingBenchmarks[esid];
+          if (!eb) return;
+          const uOwn = eb.attractiveness / Math.pow(0.25, lam);
+          const uComp = 0.45 * eb.competitor_cafes_500m;
+          const uNew = (0.68 * attractiveness) / Math.pow(Math.max(distMiles, 0.15), lam);
+
+          const cannibShare = uNew / (uOwn + uComp + uNew);
+          const cannibReceipts = Math.round(eb.avg_monthly_receipts * cannibShare);
+          const cannibSales = Number((eb.avg_monthly_sales_gbp * cannibShare).toFixed(2));
+          const cannibProfit = Number((cannibSales * eb.marginal_contribution_rate).toFixed(2));
+
+          totalCannibReceipts += cannibReceipts;
+          totalCannibSales += cannibSales;
+          totalCannibProfit += cannibProfit;
+
+          cannibalizedStores.push({
+            store_id: esid,
+            store_name: eb.store_name,
+            distance_miles: distMiles,
+            huff_utility_new: Number(uNew.toFixed(2)),
+            cannibalization_pct: Number((cannibShare * 100).toFixed(1)),
+            diverted_receipts_month: cannibReceipts,
+            cannibalized_sales_gbp: cannibSales,
+            cannibalized_profit_gbp: cannibProfit
+          });
+        });
+
+        totalCannibSales = Number(totalCannibSales.toFixed(2));
+        totalCannibProfit = Number(totalCannibProfit.toFixed(2));
+        const netIncrementalProfit = Number((standaloneProfit - totalCannibProfit).toFixed(2));
+        const netAnnualProfit = Number((netIncrementalProfit * 12).toFixed(2));
+        const cannibDragPct = standaloneProfit > 0 ? Number(((totalCannibProfit / standaloneProfit) * 100).toFixed(1)) : 100.0;
+        const paybackMonths = netIncrementalProfit > 0 ? Number((fitout / netIncrementalProfit).toFixed(1)) : null;
+        const annualRoiPct = fitout > 0 ? Number(((netAnnualProfit / fitout) * 100).toFixed(1)) : 0.0;
+
+        let verdict = 'Marginal / Slow Payback';
+        let verdictLevel = 'warning';
+        if (netIncrementalProfit >= 7500 && cannibDragPct < 25) {
+          verdict = '★ Prime Expansion';
+          verdictLevel = 'success';
+        } else if (netIncrementalProfit >= 3500 && cannibDragPct < 45) {
+          verdict = '✓ Viable Growth';
+          verdictLevel = 'info';
+        } else if (totalCannibProfit >= 2500 && netIncrementalProfit < 2000) {
+          verdict = '⚠️ Cannibalization Trap';
+          verdictLevel = 'danger';
+        } else if (standaloneProfit < 0 || netIncrementalProfit < 0) {
+          verdict = '✗ Unprofitable Site';
+          verdictLevel = 'danger';
+        }
+
+        return {
+          site_id: cid,
+          site_name: cname,
+          city,
+          location_type: locType,
+          sqft,
+          quoted_rent_gbp_month: rent,
+          daily_footfall_street: streetFf,
+          office_workers_500m: officeW,
+          students_1km: students,
+          median_household_income_gbp: income,
+          competitor_cafes_500m: comp,
+          area_vibrancy_index_10: vib,
+          est_fitout_gbp: fitout,
+          huff_attractiveness: Number(attractiveness.toFixed(3)),
+          est_monthly_receipts: estMonthlyReceipts,
+          est_avg_ticket_gbp: estAvgTicket,
+          est_monthly_sales_gbp: estMonthlySales,
+          est_total_costs_gbp: totalCosts,
+          standalone_profit_gbp: standaloneProfit,
+          standalone_margin_pct: standaloneMarginPct,
+          cannibalized_receipts_month: totalCannibReceipts,
+          cannibalized_sales_gbp: totalCannibSales,
+          cannibalized_profit_gbp: totalCannibProfit,
+          cannibalization_drag_pct: cannibDragPct,
+          cannibalized_stores: cannibalizedStores,
+          net_incremental_profit_gbp: netIncrementalProfit,
+          net_annual_profit_gbp: netAnnualProfit,
+          payback_months: paybackMonths,
+          annual_roi_pct: annualRoiPct,
+          verdict,
+          verdict_level: verdictLevel
+        };
+      });
+
+      projections.sort((a, b) => b.net_incremental_profit_gbp - a.net_incremental_profit_gbp);
+      return { existingBenchmarks, projections };
+    },
+
+    renderCatchmentTab() {
+      const { existingBenchmarks, projections } = this.computeDynamicHuffModel();
+      const cityFilter = state.huffParams.cityFilter || 'ALL';
+      const filteredProjs = cityFilter === 'ALL'
+        ? projections
+        : projections.filter(p => p.city.toLowerCase() === cityFilter.toLowerCase());
+
+      // Update Top KPI Cards
+      if (projections.length > 0) {
+        const topSite = projections[0];
+        $('kpiTopExpansionSite').textContent = `${topSite.site_id} · ${topSite.site_name.replace(topSite.city + ' ', '')}`;
+        $('kpiTopExpansionSub').textContent = `+${formatGBP(topSite.net_incremental_profit_gbp)}/mo Net Chain Profit`;
+
+        const viableSites = projections.filter(p => p.net_incremental_profit_gbp > 0);
+        const totalViableMonthly = viableSites.reduce((acc, p) => acc + p.net_incremental_profit_gbp, 0);
+        $('kpiTotalViableProfit').textContent = `+${formatGBP(totalViableMonthly)}/mo`;
+        $('kpiTotalViableSub').textContent = `${viableSites.length} Net-Positive Sites (+${formatGBPCompact(totalViableMonthly * 12)}/yr)`;
+
+        const worstCannib = [...projections].sort((a, b) => b.cannibalized_profit_gbp - a.cannibalized_profit_gbp)[0];
+        if (worstCannib) {
+          $('kpiWorstCannibSite').textContent = `${worstCannib.site_id} · ${worstCannib.site_name.replace(worstCannib.city + ' ', '')}`;
+          const storesAffected = worstCannib.cannibalized_stores.map(s => s.store_id).join(' & ') || 'Existing Stores';
+          $('kpiWorstCannibSub').textContent = `-${formatGBP(worstCannib.cannibalized_profit_gbp)}/mo Cannibalized from ${storesAffected}`;
+        }
+
+        const cs7 = projections.find(p => p.site_id === 'CS7');
+        if (cs7 && $('calloutCs7Standalone')) {
+          $('calloutCs7Standalone').textContent = `${formatGBP(cs7.standalone_profit_gbp)}/mo`;
+          $('calloutCs7CannibLoss').textContent = `-${formatGBP(cs7.cannibalized_profit_gbp)}/mo`;
+          $('calloutCs7Net').textContent = `${formatGBP(cs7.net_incremental_profit_gbp)}/mo`;
+        }
+      }
+
+      // Draw Canvas Charts
+      MicroChart.drawExpansionBarChart('chartExpansionProfits', filteredProjs);
+      MicroChart.drawHuffNetworkChart('chartHuffGravityMap', projections, existingBenchmarks);
+
+      // Render Candidate Expansion Table
+      const tbody = $('candidateSitesTableBody');
+      if (tbody) {
+        tbody.innerHTML = '';
+        filteredProjs.forEach(s => {
+          const affectedStr = s.cannibalized_stores.length > 0
+            ? s.cannibalized_stores.map(cs => `<strong>${cs.store_id}</strong> (${cs.distance_miles}mi: -${cs.cannibalization_pct}%)`).join('<br>')
+            : '<span style="color: var(--success); font-weight: 600;">0% (Greenfield City)</span>';
+
+          const paybackStr = s.payback_months !== null && s.payback_months < 240
+            ? `${s.payback_months} mos (${s.annual_roi_pct}% ROI)`
+            : '<span style="color: var(--danger);">Never / Neg. Cashflow</span>';
+
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td><strong>${s.site_id}</strong></td>
+            <td><strong>${s.site_name}</strong></td>
+            <td>${s.city} <span style="font-size: 0.725rem; color: var(--text-muted);">(${s.location_type})</span></td>
+            <td style="text-align: right;">${formatInt(s.sqft)} sqft<br><span style="font-size: 0.725rem; color: var(--text-muted);">${formatGBP(s.quoted_rent_gbp_month)}/mo</span></td>
+            <td style="text-align: right; font-size: 0.75rem;">
+              🚶 ${formatInt(s.daily_footfall_street)}/d<br>
+              💼 ${formatInt(s.office_workers_500m)} · 🎓 ${formatInt(s.students_1km)}
+            </td>
+            <td style="text-align: right; font-weight: 700;">${formatInt(s.est_monthly_receipts)}</td>
+            <td style="text-align: right; font-weight: 600; color: var(--accent-primary);">${formatGBP(s.est_avg_ticket_gbp)}</td>
+            <td style="text-align: right; font-weight: 600;">${formatGBP(s.est_monthly_sales_gbp)}</td>
+            <td style="text-align: right; color: var(--text-muted);">${formatGBP(s.est_total_costs_gbp)}</td>
+            <td style="text-align: right; font-weight: 700; color: ${s.standalone_profit_gbp >= 0 ? 'var(--success)' : 'var(--danger)'};">
+              ${formatGBP(s.standalone_profit_gbp)}<br>
+              <span style="font-size: 0.7rem; font-weight: normal;">(${s.standalone_margin_pct}% margin)</span>
+            </td>
+            <td style="text-align: right; font-weight: 700; color: ${s.cannibalized_profit_gbp > 1000 ? 'var(--danger)' : (s.cannibalized_profit_gbp > 0 ? 'var(--warning)' : 'var(--success)')};">
+              -${formatGBP(s.cannibalized_profit_gbp)}<br>
+              <span style="font-size: 0.7rem; font-weight: normal;">(-${formatInt(s.cannibalized_receipts_month)} cust/mo)</span>
+            </td>
+            <td style="font-size: 0.75rem; line-height: 1.35;">${affectedStr}</td>
+            <td style="text-align: right; font-weight: 800; font-size: 0.9rem; color: ${s.net_incremental_profit_gbp >= 0 ? 'var(--success)' : 'var(--danger)'};">
+              ${s.net_incremental_profit_gbp >= 0 ? '+' : ''}${formatGBP(s.net_incremental_profit_gbp)}<br>
+              <span style="font-size: 0.7rem; font-weight: normal; color: var(--text-muted);">${formatGBPCompact(s.net_annual_profit_gbp)}/yr</span>
+            </td>
+            <td style="text-align: right; font-size: 0.775rem;">
+              <strong>${formatGBPCompact(s.est_fitout_gbp)}</strong><br>
+              ${paybackStr}
+            </td>
+            <td><span class="badge-tag ${s.verdict_level}">${s.verdict}</span></td>
+          `;
+          tbody.appendChild(tr);
+        });
+      }
+
+      // Render Pairwise Huff Cannibalization Cards
+      const cardsGrid = $('huffCannibalizationCardsGrid');
+      if (cardsGrid) {
+        cardsGrid.innerHTML = '';
+        filteredProjs.forEach(s => {
+          const card = document.createElement('div');
+          card.className = 'compare-store-card';
+          const borderColor = s.net_incremental_profit_gbp >= 4000 ? 'var(--success)' : (s.net_incremental_profit_gbp >= 0 ? 'var(--warning)' : 'var(--danger)');
+          card.style.borderTopColor = borderColor;
+
+          let cannibRowsHtml = '';
+          if (s.cannibalized_stores.length === 0) {
+            cannibRowsHtml = `
+              <div style="padding: 0.75rem; background: var(--success-bg); border-radius: var(--radius-sm); color: var(--success); font-size: 0.775rem; margin-top: 0.5rem;">
+                ✓ <strong>Zero Cannibalization (Greenfield Market)</strong>: No existing Grind & Crumb stores in ${s.city}. 100% of site profit (+${formatGBP(s.standalone_profit_gbp)}/mo) is incremental to the chain.
+              </div>
+            `;
+          } else {
+            cannibRowsHtml = s.cannibalized_stores.map(cs => `
+              <div style="background: var(--bg-secondary); padding: 0.55rem 0.7rem; border-radius: 4px; margin-top: 0.45rem; font-size: 0.775rem; border-left: 3px solid ${cs.cannibalization_pct >= 6 ? 'var(--danger)' : 'var(--warning)'};">
+                <div style="display: flex; justify-content: space-between; font-weight: 700;">
+                  <span>➔ ${cs.store_id} (${cs.store_name})</span>
+                  <span style="color: var(--danger);">-${formatGBP(cs.cannibalized_profit_gbp)}/mo profit</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; color: var(--text-muted); font-size: 0.725rem; margin-top: 2px;">
+                  <span>Distance: <strong>${cs.distance_miles} mi</strong> | Utility U_ij: <strong>${cs.huff_utility_new}</strong></span>
+                  <span>Diverts <strong>${cs.cannibalization_pct}%</strong> (${formatInt(cs.diverted_receipts_month)} cust/mo)</span>
+                </div>
+              </div>
+            `).join('');
+          }
+
+          card.innerHTML = `
+            <div class="compare-store-header">
+              <div>
+                <div style="font-size: 0.725rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">
+                  ${s.city} · ${s.location_type} · Attractiveness A_j = ${s.huff_attractiveness}
+                </div>
+                <h4 style="font-size: 0.95rem; font-weight: 800; margin-top: 2px;">${s.site_id} — ${s.site_name}</h4>
+              </div>
+              <span class="badge-tag ${s.verdict_level}">${s.verdict}</span>
+            </div>
+            <div class="compare-metric-row">
+              <span>Estimated Customer Demand & Spend:</span>
+              <strong>${formatInt(s.est_monthly_receipts)} cust/mo @ ${formatGBP(s.est_avg_ticket_gbp)}</strong>
+            </div>
+            <div class="compare-metric-row">
+              <span>Standalone Monthly Profit:</span>
+              <strong style="color: ${s.standalone_profit_gbp >= 0 ? 'var(--success)' : 'var(--danger)'};">${formatGBP(s.standalone_profit_gbp)}</strong>
+            </div>
+            <div class="compare-metric-row">
+              <span>Total Huff Cannibalization Drag:</span>
+              <strong style="color: var(--danger);">-${formatGBP(s.cannibalized_profit_gbp)}/mo</strong>
+            </div>
+            <div class="compare-metric-row" style="border-bottom: none; padding-top: 0.4rem;">
+              <span><strong>Net Chain Incremental Profit:</strong></span>
+              <strong style="font-size: 0.95rem; color: ${s.net_incremental_profit_gbp >= 0 ? 'var(--success)' : 'var(--danger)'};">
+                ${s.net_incremental_profit_gbp >= 0 ? '+' : ''}${formatGBP(s.net_incremental_profit_gbp)}/mo
+              </strong>
+            </div>
+            ${cannibRowsHtml}
+          `;
+          cardsGrid.appendChild(card);
+        });
+      }
+
+      // Render Existing Store Benchmark Table
+      const benchBody = $('existingCatchmentBenchmarkBody');
+      if (benchBody) {
+        benchBody.innerHTML = '';
+        Object.values(existingBenchmarks).forEach(eb => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td><strong>${eb.store_id}</strong></td>
+            <td>${eb.store_name}</td>
+            <td>${eb.city}</td>
+            <td>${eb.location_type}</td>
+            <td style="text-align: right;">${formatInt(eb.sqft)}</td>
+            <td style="text-align: right;">${formatInt(eb.daily_footfall_street)}</td>
+            <td style="text-align: right;">${formatInt(eb.office_workers_500m)}</td>
+            <td style="text-align: right;">${formatInt(eb.students_1km)}</td>
+            <td style="text-align: right;">${formatGBP(eb.median_household_income_gbp)}</td>
+            <td style="text-align: right; color: var(--accent-primary); font-weight: 700;">${eb.area_vibrancy_index_10} / 10</td>
+            <td style="text-align: right; font-family: monospace;">${eb.attractiveness.toFixed(3)}</td>
+            <td style="text-align: right; font-weight: 700;">${formatInt(eb.avg_monthly_receipts)}</td>
+            <td style="text-align: right; font-weight: 600; color: var(--accent-primary);">${formatGBP(eb.avg_ticket_gbp)}</td>
+            <td style="text-align: right; font-weight: 600;">${formatGBP(eb.avg_monthly_sales_gbp)}</td>
+            <td style="text-align: right; font-weight: 700; color: ${eb.avg_monthly_profit_gbp >= 0 ? 'var(--success)' : 'var(--danger)'};">${formatGBP(eb.avg_monthly_profit_gbp)}</td>
+          `;
+          benchBody.appendChild(tr);
+        });
+      }
+    },
+
+    // --- TAB 7: DATA EXPLORER & VALIDATED CSV UPLOAD ---
+    renderValidationReportPanel() {
+      const report = state.validationReport;
+      if (!report) return;
+
+      const s = report.summary || { total_tests: 0, passed: 0, warnings: 0, failed: 0, pass_rate_percentage: 100 };
+      const badge = $('valOverallBadge');
+      if (badge) {
+        badge.textContent = report.status;
+        badge.className = 'badge-tag ' + (report.status === 'PASS' ? '' : (report.status === 'WARN' ? 'warning' : 'danger'));
+      }
+
+      if ($('valTargetSubtitle')) {
+        $('valTargetSubtitle').textContent = report.filename
+          ? `Uploaded File: ${report.filename} (Detected Schema: ${report.detected_schema || 'custom'}, ${report.row_count || 0} rows)`
+          : `Target: Baseline Dataset Pack (22 tables cross-checked)`;
+      }
+
+      if ($('valKpiStatus')) {
+        $('valKpiStatus').textContent = report.status;
+        $('valKpiStatus').style.color = report.status === 'PASS' ? 'var(--success)' : (report.status === 'WARN' ? 'var(--warning)' : 'var(--danger)');
+      }
+      if ($('valKpiSchema')) {
+        $('valKpiSchema').textContent = report.detected_schema ? `Schema: ${report.detected_schema}` : 'Full Dataset Pack';
+      }
+      if ($('valKpiTotal')) $('valKpiTotal').textContent = s.total_tests;
+      if ($('valKpiDuration')) $('valKpiDuration').textContent = `${(report.execution_metadata || {}).duration_ms || 0} ms`;
+      if ($('valKpiPassed')) $('valKpiPassed').textContent = s.passed;
+      if ($('valKpiPassRate')) $('valKpiPassRate').textContent = `${s.pass_rate_percentage}% Pass Rate`;
+      if ($('valKpiWarn')) $('valKpiWarn').textContent = s.warnings;
+      if ($('valKpiFail')) $('valKpiFail').textContent = s.failed;
+
+      const tbody = $('validationResultsTableBody');
+      if (!tbody) return;
+      tbody.innerHTML = '';
+
+      const filter = state.valStatusFilter || 'ALL';
+      const rows = (report.results || []).filter(r => filter === 'ALL' || r.status === filter);
+
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 1.25rem; color: var(--text-muted);">No validation checks match the active status filter.</td></tr>';
+        return;
+      }
+
+      rows.forEach(r => {
+        const badgeCls = r.status === 'PASS' ? 'reconciled' : (r.status === 'WARN' ? 'pending' : 'HIGH');
+        const sampleText = (r.samples && r.samples.length)
+          ? `<code style="font-size: 0.725rem; color: var(--text-muted);">${JSON.stringify(r.samples.slice(0, 3)).slice(0, 95)}</code>`
+          : '<span style="color: var(--text-dim);">—</span>';
+
         const tr = document.createElement('tr');
         tr.innerHTML = `
-          <td><strong>${s.site_id}</strong></td>
-          <td>${s.site_name}</td>
-          <td>${s.city}</td>
-          <td>${s.location_type}</td>
-          <td style="text-align: right;">${formatInt(s.sqft)}</td>
-          <td style="text-align: right; font-weight: 600;">${formatGBP(s.quoted_rent_gbp_month)}</td>
-          <td style="text-align: right;">${formatInt(s.daily_footfall_street)}</td>
-          <td style="text-align: right;">${formatInt(s.office_workers_500m)}</td>
-          <td style="text-align: right;">${formatInt(s.students_1km)}</td>
-          <td style="text-align: right;">${formatGBP(s.median_household_income_gbp)}</td>
-          <td style="text-align: right; font-weight: 700; color: var(--accent-primary);">${s.area_vibrancy_index_10} / 10</td>
-          <td style="text-align: right; font-weight: 600;">${formatGBP(s.est_fitout_gbp)}</td>
+          <td><span class="${r.status === 'FAIL' ? 'severity-badge HIGH' : 'status-badge ' + badgeCls}">${r.status}</span></td>
+          <td><code>${r.test_id}</code></td>
+          <td><strong>${r.category}</strong></td>
+          <td>${r.test_name}</td>
+          <td style="white-space: normal; max-width: 380px;">${r.message}</td>
+          <td style="text-align: right; font-weight: 700;">${r.affected_count || 0}</td>
+          <td style="white-space: normal; max-width: 260px;">${sampleText}</td>
         `;
         tbody.appendChild(tr);
       });
     },
 
-    // --- TAB 7: DATA EXPLORER & DYNAMIC INGESTION ---
+    async runBaselineValidation() {
+      try {
+        const res = await fetch('/api/validate-dataset');
+        if (res.ok) {
+          const report = await res.json();
+          state.validationReport = report;
+          this.renderValidationReportPanel();
+          return;
+        }
+      } catch (_) {
+        // Offline / static file:// fallback
+      }
+      if (state.data.validation_baseline_report) {
+        state.validationReport = state.data.validation_baseline_report;
+        this.renderValidationReportPanel();
+      }
+    },
+
     renderExplorerTab() {
       const datasetKey = state.activeDataset;
       let rows = [];
@@ -1540,6 +2690,7 @@
       else if (datasetKey === 'promotions') rows = state.data.promotions || [];
       else if (datasetKey === 'capex') rows = state.data.capex || [];
       else if (datasetKey === 'events') rows = state.data.events_raw || [];
+      else if (state.data[datasetKey]) rows = state.data[datasetKey];
 
       const thead = $('explorerTableHead');
       const tbody = $('explorerTableBody');
@@ -1582,6 +2733,7 @@
       else if (datasetKey === 'promotions') rows = state.data.promotions || [];
       else if (datasetKey === 'capex') rows = state.data.capex || [];
       else if (datasetKey === 'events') rows = state.data.events_raw || [];
+      else if (state.data[datasetKey]) rows = state.data[datasetKey];
 
       if (!rows.length) return;
       const headers = Object.keys(rows[0]);
@@ -1605,18 +2757,6 @@
         let csv = headers.join(',') + '\n';
         rows.forEach(r => { csv += headers.map(h => r[h]).join(',') + '\n'; });
         this.downloadBlob(csv, 'fixed_store_monthly_pnl.csv', 'text/csv');
-      } else if (fileKey === 'report_csv') {
-        const discs = state.data.discrepancies || [];
-        if (!discs.length) return;
-        const headers = ['category', 'severity', 'month', 'store_id', 'field', 'pnl_value', 'expected_value', 'description'];
-        let csv = headers.join(',') + '\n';
-        discs.forEach(d => {
-          csv += headers.map(h => `"${String(d[h] || '').replace(/"/g, '""')}"`).join(',') + '\n';
-        });
-        this.downloadBlob(csv, 'discrepancies_report.csv', 'text/csv');
-      } else if (fileKey === 'summary_md') {
-        const mdText = `# Grind & Crumb: Reconciliation Audit Summary\n\nTotal Discrepancies Audited & Reconciled: ${state.data.discrepancies.length}\nData Integrity Score: 99.8%\n\nDetailed breakdown is available in the dashboard.`;
-        this.downloadBlob(mdText, 'audit_summary_report.md', 'text/markdown');
       } else if (fileKey === 'cleaned_waste') {
         window.open('cleaned_waste_log.csv', '_blank');
       } else if (fileKey === 'cleaned_rota') {
@@ -1640,51 +2780,146 @@
       URL.revokeObjectURL(url);
     },
 
-    // --- DYNAMIC RE-INGESTION HANDLER ---
+    // --- VALIDATED CSV UPLOAD HANDLER ---
     handleFileUpload(files) {
       Array.from(files).forEach(file => {
         const reader = new FileReader();
-        reader.onload = (e) => {
+        reader.onload = async (e) => {
           const text = e.target.result;
-          const rows = this.parseCSVText(text);
-          if (rows.length) {
-            const fname = file.name.toLowerCase();
-            
-            // Check if uploaded file is business_events.csv
-            if (fname.includes('event')) {
-              state.data.events_raw = rows;
-              alert(`Modular Engine: Dynamically loaded ${rows.length} business events from '${file.name}'! Re-calculating trajectory impacts...`);
-              this.recalculateEventsImpact();
-              this.renderDashboardTab();
-              this.renderEventsImpactTab();
-            } else if (fname.includes('pnl')) {
-              state.data.pnl_fixed = rows;
-              alert(`Modular Engine: Loaded ${rows.length} P&L rows. Re-calculating all dashboard metrics...`);
-              this.renderDashboardTab();
-              this.renderChannelEconomicsTab();
-            } else {
-              alert(`Successfully loaded '${file.name}' with ${rows.length} rows into active memory!`);
+          const { rows, headers } = this.parseCSVWithHeaders(text);
+
+          // 1. Try validating via Python backend (validate_grind_crumb.py API) first, fallback to client mirror
+          let report = null;
+          try {
+            const resp = await fetch('/api/validate-csv', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ filename: file.name, content: text })
+            });
+            if (resp.ok) {
+              report = await resp.json();
             }
-            state.data[file.name] = rows;
-            this.renderExplorerTab();
+          } catch (_) {
+            // Static file:// mode fallback
+          }
+
+          if (!report) {
+            report = CSVValidator.validateUploadedFileClient(file.name, text, rows, headers);
+          }
+
+          state.validationReport = report;
+          state.valStatusFilter = 'ALL';
+          if ($('valStatusFilter')) $('valStatusFilter').value = 'ALL';
+          this.renderValidationReportPanel();
+
+          state.pendingUpload = {
+            filename: file.name,
+            schema: report.detected_schema,
+            rows,
+            report
+          };
+
+          const banner = $('valUploadActionBanner');
+          const bannerText = $('valUploadBannerText');
+          if (banner && bannerText) {
+            banner.style.display = 'flex';
+            const statusColor = report.status === 'PASS' ? 'var(--success)' : (report.status === 'WARN' ? 'var(--warning)' : 'var(--danger)');
+            bannerText.innerHTML = `
+              <strong style="color: ${statusColor};">[${report.status}]</strong>
+              Validated <code>${file.name}</code> (${rows.length} rows, schema: <code>${report.detected_schema}</code>) —
+              <strong>${report.summary.passed}/${report.summary.total_tests} checks passed</strong>
+              (${report.summary.warnings} warnings, ${report.summary.failed} failed).
+            `;
+            // If PASS, also auto-ingest immediately so user sees instant update while keeping banner visible
+            if (report.status === 'PASS') {
+              this.applyPendingUpload(true);
+            }
           }
         };
         reader.readAsText(file);
       });
     },
 
-    // Dynamic modular recalculation for business events added in real time
+    applyPendingUpload(autoApplied = false) {
+      if (!state.pendingUpload) return;
+      const { filename, schema, rows, report } = state.pendingUpload;
+
+      if (schema === 'business_events.csv' || filename.toLowerCase().includes('event')) {
+        state.data.events_raw = rows;
+        this.recalculateEventsImpact();
+        state.activeDataset = 'events';
+        $('selectDataset').value = 'events';
+      } else if (schema === 'starter_store_monthly_pnl.csv' || filename.toLowerCase().includes('pnl')) {
+        state.data.pnl_fixed = rows;
+        this.recalculateEventsImpact();
+        state.activeDataset = 'fixed_pnl';
+        $('selectDataset').value = 'fixed_pnl';
+      } else if (schema === 'candidate_sites.csv' || filename.toLowerCase().includes('candidate')) {
+        state.data.candidate_sites = rows;
+        state.activeDataset = 'candidate_sites';
+        $('selectDataset').value = 'candidate_sites';
+      } else if (schema === 'store_catchment.csv' || filename.toLowerCase().includes('catchment')) {
+        state.data.catchment = rows;
+        state.activeDataset = 'catchment';
+        $('selectDataset').value = 'catchment';
+      } else if (schema === 'stores.csv') {
+        state.data.stores = rows;
+        state.activeDataset = 'stores';
+        $('selectDataset').value = 'stores';
+      } else if (schema === 'promotions.csv') {
+        state.data.promotions = rows;
+        state.activeDataset = 'promotions';
+        $('selectDataset').value = 'promotions';
+      } else if (schema === 'capex.csv') {
+        state.data.capex = rows;
+        state.activeDataset = 'capex';
+        $('selectDataset').value = 'capex';
+      } else {
+        state.data[filename] = rows;
+        const sel = $('selectDataset');
+        if (!Array.from(sel.options).some(o => o.value === filename)) {
+          const opt = document.createElement('option');
+          opt.value = filename;
+          opt.textContent = `Uploaded: ${filename} (${rows.length} rows)`;
+          sel.appendChild(opt);
+        }
+        state.activeDataset = filename;
+        sel.value = filename;
+      }
+
+      this.renderDashboardTab();
+      this.renderMultiStoreCompareTab();
+      this.renderChannelEconomicsTab();
+      this.renderCatchmentTab();
+      this.renderExplorerTab();
+
+      const banner = $('valUploadActionBanner');
+      const bannerText = $('valUploadBannerText');
+      if (banner && bannerText) {
+        bannerText.innerHTML = `
+          <strong style="color: var(--success);">✓ INGESTED INTO ACTIVE MEMORY:</strong>
+          <code>${filename}</code> (${rows.length} rows, schema: <code>${schema}</code>) —
+          Validation: <strong>${report.summary.passed}/${report.summary.total_tests} passed</strong>.
+          All dashboard charts, P&L views, and Huff Gravity models have been updated!
+        `;
+        if (!autoApplied) {
+          setTimeout(() => { banner.style.display = 'none'; }, 4000);
+        }
+      }
+      state.pendingUpload = null;
+    },
+
     recalculateEventsImpact() {
       const events = state.data.events_raw || [];
       const pnl = state.data.pnl_fixed || [];
       const stores = state.data.stores || [];
-      const scopes = ["ALL"].concat(stores.map(s => s.store_id));
+      const scopes = ['ALL'].concat(stores.map(s => s.store_id));
 
       const getMetrics = (scope) => {
         const mObj = {};
         MONTH_LIST.forEach(m => {
           let rows = pnl.filter(r => r.month === m);
-          if (scope !== "ALL") rows = rows.filter(r => r.store_id === scope);
+          if (scope !== 'ALL') rows = rows.filter(r => r.store_id === scope);
           const sales = rows.reduce((acc, r) => acc + Number(r.total_sales_gbp || 0), 0);
           const profit = rows.reduce((acc, r) => acc + Number(r.store_profit_gbp || 0), 0);
           mObj[m] = { sales, profit };
@@ -1729,18 +2964,45 @@
       state.data.events_impact_by_scope = impactByScope;
     },
 
-    parseCSVText(text) {
-      const lines = text.trim().split(/\r?\n/);
-      if (lines.length < 2) return [];
-      const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+    parseCSVLine(line) {
+      const result = [];
+      let current = '';
+      let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') {
+          if (inQuotes && line[i + 1] === '"') {
+            current += '"';
+            i++;
+          } else {
+            inQuotes = !inQuotes;
+          }
+        } else if (ch === ',' && !inQuotes) {
+          result.push(current.trim());
+          current = '';
+        } else {
+          current += ch;
+        }
+      }
+      result.push(current.trim());
+      return result;
+    },
+
+    parseCSVWithHeaders(text) {
+      const cleanText = String(text || '').replace(/^\uFEFF/, '').trim();
+      const lines = cleanText.split(/\r?\n/).filter(l => l.trim().length > 0);
+      if (lines.length === 0) return { headers: [], rows: [] };
+      const headers = this.parseCSVLine(lines[0]);
       const rows = [];
       for (let i = 1; i < lines.length; i++) {
-        const vals = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+        const vals = this.parseCSVLine(lines[i]);
         const obj = {};
-        headers.forEach((h, idx) => { obj[h] = vals[idx] !== undefined ? vals[idx] : ''; });
+        headers.forEach((h, idx) => {
+          if (h) obj[h] = vals[idx] !== undefined ? vals[idx] : '';
+        });
         rows.push(obj);
       }
-      return rows;
+      return { headers, rows };
     }
   };
 

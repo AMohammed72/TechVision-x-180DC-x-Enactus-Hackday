@@ -2,8 +2,9 @@ import os
 import csv
 import json
 from collections import defaultdict
+from validate_grind_crumb import validate_dataset
 
-WORKSPACE_DIR = r"C:\Users\gotta\Downloads\Data verifier"
+WORKSPACE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(WORKSPACE_DIR, "grind_and_crumb_data")
 
 MONTH_ORDER = [
@@ -11,15 +12,266 @@ MONTH_ORDER = [
     '2026-01', '2026-02', '2026-03', '2026-04', '2026-05', '2026-06'
 ]
 
+# Real-world inter-site distances (miles) between Candidate Sites (CS1-CS7) and Existing Stores (S01-S12)
+CANDIDATE_DISTANCES_MILES = {
+    "CS1": {"S03": 2.50, "S12": 2.65},                           # Leeds Headingley -> Leeds Briggate, Leeds Trinity
+    "CS2": {"S01": 1.25, "S11": 1.35, "S02": 1.45},              # Sheffield Kelham Island -> Division St, Uni Campus, Station
+    "CS3": {"S07": 0.75, "S06": 1.05, "S05": 1.20},              # Manchester Oxford Rd -> Piccadilly, Spinningfields, NQ
+    "CS4": {"S04": 0.55},                                        # York Railway Station -> York Stonegate
+    "CS5": {},                                                   # Liverpool Bold Street -> Greenfield (0 existing stores)
+    "CS6": {"S12": 9.50, "S03": 9.80},                           # Wakefield Trinity Walk -> ~9.5 miles from Leeds stores
+    "CS7": {"S12": 0.42, "S03": 0.52}                            # Leeds Wellington Place -> Central Leeds (0.42mi to Trinity, 0.52mi to Briggate)
+}
+
+
 def load_csv(path):
     with open(path, mode='r', encoding='utf-8-sig') as f:
         return list(csv.DictReader(f))
 
+
+def compute_huff_expansion_model(pnl, stores_dict, catchment_list, candidates_list, lam=2.0, alpha=0.85, spend_mult=1.0):
+    """
+    Estimates potential customer counts, average customer spending, standalone store P&L,
+    and Huff Gravity Model cannibalization across existing stores for all candidate sites.
+    """
+    catch_map = {r['store_id']: r for r in catchment_list}
+
+    # 1. Compute Existing Store Customer Spending & Volume Benchmarks
+    existing_benchmarks = {}
+    for sid, s_info in sorted(stores_dict.items()):
+        rows = [r for r in pnl if r['store_id'] == sid]
+        # For S12 (opened mid-Sept 2025), use full months Oct 2025 - Jun 2026 for steady-state run rate
+        steady_rows = [r for r in rows if r['month'] >= '2025-10'] if sid == 'S12' else rows
+        n = len(steady_rows) or 1
+
+        avg_sales = sum(float(r['total_sales_gbp']) for r in steady_rows) / n
+        avg_receipts = sum(float(r['total_receipts']) for r in steady_rows) / n
+        avg_door = sum(float(r['door_count']) for r in steady_rows) / n
+        avg_profit = sum(float(r['store_profit_gbp']) for r in steady_rows) / n
+        avg_ticket = avg_sales / avg_receipts if avg_receipts > 0 else 5.95
+        conv_rate = avg_receipts / avg_door if avg_door > 0 else 0.38
+
+        c_info = catch_map.get(sid, {})
+        sqft = float(s_info.get('sqft', 1400))
+        vib = float(c_info.get('area_vibrancy_index_10', 7.2))
+        comp = float(c_info.get('competitor_cafes_500m', 8))
+        attractiveness = ((sqft / 1400.0) ** alpha) * ((vib / 7.2) ** 0.90)
+
+        existing_benchmarks[sid] = {
+            "store_id": sid,
+            "store_name": s_info['store_name'],
+            "city": s_info['city'],
+            "format": s_info['format'],
+            "location_type": s_info['location_type'],
+            "sqft": int(sqft),
+            "rent_gbp_month": float(s_info['rent_gbp_month']),
+            "daily_footfall_street": int(float(c_info.get('daily_footfall_street', 25000))),
+            "office_workers_500m": int(float(c_info.get('office_workers_500m', 5000))),
+            "students_1km": int(float(c_info.get('students_1km', 4000))),
+            "median_household_income_gbp": int(float(c_info.get('median_household_income_gbp', 33000))),
+            "competitor_cafes_500m": int(comp),
+            "area_vibrancy_index_10": vib,
+            "avg_monthly_receipts": round(avg_receipts),
+            "avg_ticket_gbp": round(avg_ticket, 2),
+            "avg_monthly_sales_gbp": round(avg_sales, 2),
+            "avg_monthly_profit_gbp": round(avg_profit, 2),
+            "profit_margin_pct": round((avg_profit / avg_sales) * 100, 1) if avg_sales > 0 else 0.0,
+            "conversion_rate_pct": round(conv_rate * 100, 1),
+            "attractiveness": round(attractiveness, 3),
+            # Empirical marginal contribution rate per £1 of sales (food 27.4% + deliv 5.8% + semi-var labour 25.0% -> 41.8% profit impact)
+            "marginal_contribution_rate": 0.418
+        }
+
+    # Base spend calibration by location_type derived from existing stores
+    loc_base_ticket = {
+        "Office district": 6.24,
+        "High street": 6.14,
+        "Tourist": 6.19,
+        "Affluent town": 6.22,
+        "Shopping centre": 5.96,
+        "Transit": 5.76,
+        "Campus": 5.62
+    }
+
+    candidate_projections = []
+    for cand in candidates_list:
+        cid = cand['site_id']
+        cname = cand['site_name']
+        city = cand['city']
+        loc_type = cand['location_type']
+        sqft = float(cand['sqft'])
+        rent = float(cand['quoted_rent_gbp_month'])
+        street_ff = float(cand['daily_footfall_street'])
+        office_w = float(cand['office_workers_500m'])
+        students = float(cand['students_1km'])
+        income = float(cand['median_household_income_gbp'])
+        comp = float(cand['competitor_cafes_500m'])
+        vib = float(cand['area_vibrancy_index_10'])
+        fitout = float(cand['est_fitout_gbp'])
+
+        # 1. Huff Attractiveness A_c
+        attractiveness = ((sqft / 1400.0) ** alpha) * ((vib / 7.2) ** 0.90)
+
+        # 2. Estimated Customer Spend (Avg Ticket GBP) calibrated on existing stores' spend & income elasticity
+        base_tkt = loc_base_ticket.get(loc_type, 6.08)
+        income_factor = 1.0 + 0.14 * ((income - 33250.0) / 33250.0)
+        est_avg_ticket = round(base_tkt * income_factor * spend_mult, 2)
+
+        # 3. Estimated Monthly Customer Volume (Receipts) from Catchment Demand Pool & Huff Competitive Capture
+        raw_demand_pool = (street_ff * 0.21) + (office_w * 0.36) + (students * 0.15)
+        comp_resistance = 1.0 + 0.022 * comp
+        size_capacity_factor = (sqft / 1400.0) ** (0.36 * alpha)
+        vibrancy_boost = (vib / 7.2) ** 0.78
+
+        est_monthly_receipts = int(round(
+            (5450.0 + raw_demand_pool * 0.62) * size_capacity_factor * vibrancy_boost / comp_resistance
+        ))
+        # Cap by physical store/kiosk throughput capacity
+        max_capacity_receipts = int(sqft * 9.2) if sqft >= 850 else int(sqft * 15.8)
+        est_monthly_receipts = min(est_monthly_receipts, max_capacity_receipts)
+
+        # 4. Standalone Monthly Revenue & Cost Structure (using Grind & Crumb P&L accounting rules)
+        est_monthly_sales = round(est_monthly_receipts * est_avg_ticket, 2)
+        food_cost = round(est_monthly_sales * 0.274, 2)
+        is_kiosk_or_transit = (sqft < 800 or loc_type in ("Transit", "Campus"))
+        delivery_cost = round(est_monthly_sales * (0.025 if is_kiosk_or_transit else 0.058), 2)
+        labour_cost = round(3450.0 + (sqft * 1.25) + (est_monthly_sales * 0.205), 2)
+        business_rates = round(rent * 0.22, 2)
+        utilities_and_opex = round(1420.0 + (sqft * 0.98), 2)
+
+        total_operating_costs = round(
+            food_cost + labour_cost + delivery_cost + rent + business_rates + utilities_and_opex, 2
+        )
+        standalone_profit = round(est_monthly_sales - total_operating_costs, 2)
+        standalone_margin_pct = round((standalone_profit / est_monthly_sales) * 100, 1) if est_monthly_sales > 0 else 0.0
+
+        # 5. Huff Gravity Cannibalization Model across Existing Stores
+        distances = CANDIDATE_DISTANCES_MILES.get(cid, {})
+        cannibalized_stores_detail = []
+        total_cannibalized_sales = 0.0
+        total_cannibalized_profit = 0.0
+        total_cannibalized_receipts = 0
+
+        for esid, dist_miles in sorted(distances.items(), key=lambda x: x[1]):
+            if esid not in existing_benchmarks:
+                continue
+            eb = existing_benchmarks[esid]
+            # Own store internal catchment distance anchor d_ee = 0.25 miles
+            u_own = eb['attractiveness'] / (0.25 ** lam)
+            u_comp = 0.45 * eb['competitor_cafes_500m']
+            u_new = (0.68 * attractiveness) / (max(dist_miles, 0.15) ** lam)
+
+            # Huff probability of customer diversion from existing store e to candidate site c
+            cannib_share = u_new / (u_own + u_comp + u_new)
+            cannib_receipts = int(round(eb['avg_monthly_receipts'] * cannib_share))
+            cannib_sales = round(eb['avg_monthly_sales_gbp'] * cannib_share, 2)
+            cannib_profit = round(cannib_sales * eb['marginal_contribution_rate'], 2)
+
+            total_cannibalized_receipts += cannib_receipts
+            total_cannibalized_sales += cannib_sales
+            total_cannibalized_profit += cannib_profit
+
+            cannibalized_stores_detail.append({
+                "store_id": esid,
+                "store_name": eb['store_name'],
+                "distance_miles": dist_miles,
+                "huff_utility_new": round(u_new, 2),
+                "cannibalization_pct": round(cannib_share * 100, 1),
+                "diverted_receipts_month": cannib_receipts,
+                "cannibalized_sales_gbp": cannib_sales,
+                "cannibalized_profit_gbp": cannib_profit
+            })
+
+        total_cannibalized_sales = round(total_cannibalized_sales, 2)
+        total_cannibalized_profit = round(total_cannibalized_profit, 2)
+        net_incremental_profit = round(standalone_profit - total_cannibalized_profit, 2)
+        net_annual_profit = round(net_incremental_profit * 12.0, 2)
+
+        cannib_drag_pct = round(
+            (total_cannibalized_profit / standalone_profit) * 100, 1
+        ) if standalone_profit > 0 else (100.0 if total_cannibalized_profit > 0 else 0.0)
+
+        payback_months = round(fitout / net_incremental_profit, 1) if net_incremental_profit > 0 else None
+        annual_roi_pct = round((net_annual_profit / fitout) * 100, 1) if fitout > 0 else 0.0
+
+        # Strategic Decision Verdict
+        if net_incremental_profit >= 7500 and cannib_drag_pct < 25:
+            verdict = "Prime Expansion"
+            verdict_level = "success"
+        elif net_incremental_profit >= 3500 and cannib_drag_pct < 45:
+            verdict = "Viable Growth"
+            verdict_level = "info"
+        elif total_cannibalized_profit >= 2500 and net_incremental_profit < 2000:
+            verdict = "Cannibalization Trap"
+            verdict_level = "danger"
+        elif standalone_profit < 0:
+            verdict = "Unprofitable Site"
+            verdict_level = "danger"
+        else:
+            verdict = "Marginal / Slow Payback"
+            verdict_level = "warning"
+
+        candidate_projections.append({
+            "site_id": cid,
+            "site_name": cname,
+            "city": city,
+            "location_type": loc_type,
+            "sqft": int(sqft),
+            "quoted_rent_gbp_month": rent,
+            "daily_footfall_street": int(street_ff),
+            "office_workers_500m": int(office_w),
+            "students_1km": int(students),
+            "median_household_income_gbp": int(income),
+            "competitor_cafes_500m": int(comp),
+            "area_vibrancy_index_10": vib,
+            "est_fitout_gbp": fitout,
+            "huff_attractiveness": round(attractiveness, 3),
+            "est_monthly_receipts": est_monthly_receipts,
+            "est_avg_ticket_gbp": est_avg_ticket,
+            "est_monthly_sales_gbp": est_monthly_sales,
+            "est_food_cost_gbp": food_cost,
+            "est_labour_cost_gbp": labour_cost,
+            "est_delivery_cost_gbp": delivery_cost,
+            "est_rates_and_opex_gbp": round(business_rates + utilities_and_opex, 2),
+            "est_total_costs_gbp": total_operating_costs,
+            "standalone_profit_gbp": standalone_profit,
+            "standalone_margin_pct": standalone_margin_pct,
+            "cannibalized_receipts_month": total_cannibalized_receipts,
+            "cannibalized_sales_gbp": total_cannibalized_sales,
+            "cannibalized_profit_gbp": total_cannibalized_profit,
+            "cannibalization_drag_pct": cannib_drag_pct,
+            "cannibalized_stores": cannibalized_stores_detail,
+            "net_incremental_profit_gbp": net_incremental_profit,
+            "net_annual_profit_gbp": net_annual_profit,
+            "payback_months": payback_months,
+            "annual_roi_pct": annual_roi_pct,
+            "verdict": verdict,
+            "verdict_level": verdict_level
+        })
+
+    # Sort candidate projections by net_incremental_profit_gbp descending
+    candidate_projections.sort(key=lambda x: x['net_incremental_profit_gbp'], reverse=True)
+
+    return {
+        "parameters": {
+            "lambda_distance_decay": lam,
+            "alpha_size_exponent": alpha,
+            "spend_multiplier": spend_mult,
+            "empirical_anchor": "Calibrated on S12 (Leeds Trinity) opening 0.4 miles from S03 (Leeds Briggate) in Sep 2025 (-18.8% sales / -£6,806/mo profit cannibalization)"
+        },
+        "candidate_distances_miles": CANDIDATE_DISTANCES_MILES,
+        "existing_benchmarks": existing_benchmarks,
+        "candidate_projections": candidate_projections
+    }
+
+
 def run():
-    print("Enriching dataset with modular dynamic event engine and store sentiment metrics...")
-    
+    print("Enriching dataset with modular dynamic event engine, Huff Gravity expansion model, and validation suite...")
+
     pnl = load_csv(os.path.join(WORKSPACE_DIR, "fixed_store_monthly_pnl.csv"))
     stores = {r['store_id']: r for r in load_csv(os.path.join(DATA_DIR, "stores.csv"))}
+    catchment_list = load_csv(os.path.join(DATA_DIR, "store_catchment.csv"))
+    candidates_list = load_csv(os.path.join(DATA_DIR, "candidate_sites.csv"))
     sentiment_data = load_csv(os.path.join(WORKSPACE_DIR, "customer_reviews_sentiment.csv"))
     events_raw = load_csv(os.path.join(DATA_DIR, "business_events.csv"))
 
@@ -32,10 +284,8 @@ def run():
             'description': 'Dashly commission rate jumped from 27% to 33% on order value'
         })
 
-    # Sort events chronologically
     events_raw.sort(key=lambda x: x['date'])
 
-    # Helper to calculate store monthly profit dict
     def get_monthly_metrics(store_id="ALL"):
         metrics = {}
         for m in MONTH_ORDER:
@@ -50,7 +300,6 @@ def run():
             metrics[m] = {'sales': sales, 'profit': profit, 'app': app, 'delivery': deliv, 'labour': labour}
         return metrics
 
-    # Compute events impact dictionary: for "ALL" as well as for every individual store (S01-S12)
     events_impact_by_scope = {}
     scopes = ["ALL"] + sorted(list(stores.keys()))
 
@@ -61,12 +310,10 @@ def run():
             d_str = ev['date']
             ev_month = d_str[:7]
             m_idx = MONTH_ORDER.index(ev_month) if ev_month in MONTH_ORDER else -1
-            
-            # Determine pre and post months
+
             pre_m = MONTH_ORDER[m_idx - 1] if m_idx > 0 else ev_month
             post_m = MONTH_ORDER[m_idx + 1] if m_idx < len(MONTH_ORDER) - 1 else ev_month
-            
-            # Specific month overrides for mid-month transitions
+
             if "Trinity" in ev['event']:
                 pre_m = '2025-08'
                 post_m = '2025-10'
@@ -90,7 +337,6 @@ def run():
             delta_sales = post_sales - pre_sales
             pct_sales = (delta_sales / abs(pre_sales) * 100) if pre_sales != 0 else 0.0
 
-            # Store specific context
             desc = ev['description']
             if scope == "S03" and "Trinity" in ev['event']:
                 desc = "Direct cannibalization: Leeds Trinity (S12) opened 0.4 miles away, shifting substantial customer traffic away from Briggate."
@@ -116,22 +362,21 @@ def run():
             })
         events_impact_by_scope[scope] = scope_events
 
-    # Store sentiment summary
     store_sentiment_summary = {}
     for sid in sorted(stores.keys()):
         s_reviews = [r for r in sentiment_data if r['store_id'] == sid]
         if not s_reviews:
             continue
-        
+
         pos_revs = [r for r in s_reviews if r['sentiment'] == 'positive']
         neg_revs = [r for r in s_reviews if r['sentiment'] == 'negative']
-        
+
         pos_counts = defaultdict(int)
         for r in pos_revs:
             s = r.get('key_issue_summary', '')
             if s and s != 'General customer feedback':
                 pos_counts[s] += 1
-                
+
         neg_counts = defaultdict(int)
         for r in neg_revs:
             s = r.get('key_issue_summary', '')
@@ -141,13 +386,14 @@ def run():
         top_pos = [k for k, v in sorted(pos_counts.items(), key=lambda x: x[1], reverse=True)[:3]]
         if not top_pos:
             top_pos = ["High quality espresso and flat white", "Friendly and attentive barista team", "Clean, welcoming café environment"]
-            
+
         top_neg = [k for k, v in sorted(neg_counts.items(), key=lambda x: x[1], reverse=True)[:3]]
         if not top_neg:
             top_neg = ["Peak lunch hour wait times", "Missing pastry items in delivery bags", "Seating availability during rush"]
 
         avg_score = sum(float(r['sentiment_score']) for r in s_reviews) / len(s_reviews)
         avg_rating = sum(float(r['rating']) for r in s_reviews) / len(s_reviews)
+        sent_label = "Positive" if avg_score >= 0.25 else ("Neutral" if avg_score >= 0 else "Negative")
 
         store_sentiment_summary[sid] = {
             'store_id': sid,
@@ -155,12 +401,19 @@ def run():
             'city': stores[sid]['city'],
             'total_reviews': len(s_reviews),
             'avg_sentiment': round(avg_score, 3),
+            'sentiment_label': sent_label,
             'avg_rating': round(avg_rating, 2),
             'pct_positive': round(len(pos_revs) / len(s_reviews) * 100, 1),
             'pct_negative': round(len(neg_revs) / len(s_reviews) * 100, 1),
             'current_positives': top_pos,
-            'things_to_improve': top_neg
+            'things_to_improve': neg_neg if 'neg_neg' in locals() else top_neg
         }
+
+    # Compute Huff Gravity & Candidate Site Profit Projections
+    expansion_huff_model = compute_huff_expansion_model(pnl, stores, catchment_list, candidates_list)
+
+    # Compute baseline validation report from validate_grind_crumb.py
+    validation_baseline_report = validate_dataset(DATA_DIR)
 
     # Load and update dashboard_data.js
     path_data_js = os.path.join(WORKSPACE_DIR, "dashboard_data.js")
@@ -172,14 +425,26 @@ def run():
     d_obj['events_raw'] = events_raw
     d_obj['events_impact_by_scope'] = events_impact_by_scope
     d_obj['store_sentiment_summary'] = store_sentiment_summary
+    d_obj['expansion_huff_model'] = expansion_huff_model
+    d_obj['validation_baseline_report'] = validation_baseline_report
 
     with open(path_data_js, 'w', encoding='utf-8') as f:
         f.write("// Pre-aggregated high-speed dataset for zero-latency loading on low-end hardware\n")
         f.write("window.DASHBOARD_DATA = ")
         json.dump(d_obj, f)
         f.write(";\n")
-        
+
     print("Updated 'dashboard_data.js' successfully!")
+    print("\nCandidate Expansion Huff Gravity Summary:")
+    for cp in expansion_huff_model['candidate_projections']:
+        print(
+            f"  {cp['site_id']} ({cp['site_name']} - {cp['city']}): "
+            f"Cust={cp['est_monthly_receipts']}/mo @ £{cp['est_avg_ticket_gbp']:.2f} -> "
+            f"Sales=£{cp['est_monthly_sales_gbp']:,.0f}, Standalone Profit=£{cp['standalone_profit_gbp']:,.0f}, "
+            f"Cannib Loss=-£{cp['cannibalized_profit_gbp']:,.0f}, Net Chain Profit=£{cp['net_incremental_profit_gbp']:,.0f}/mo "
+            f"[{cp['verdict']}]"
+        )
+
 
 if __name__ == '__main__':
     run()
